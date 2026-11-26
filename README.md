@@ -2,58 +2,71 @@
 
 **Agents in Finance: from invoices to a validated SEPA payment draft**
 
-Accounts payable teams receive invoices and emails in every format. Someone retypes the payment details, checks them, and catches the one email that says "our bank account has changed". StockMind AI hands that work to a team of Mozaik agents. Every value is traced back to its source document, and anything doubtful goes to a human.
+Accounts payable teams receive invoices and emails in every format. Someone retypes the payment details, checks them, and has to catch the one email that says "our bank account has changed". StockMind AI hands that work to a team of Mozaik agents:
+- every value is traced back to a quote in its source document;
+- every agent's work is checked by code and by another agent;
+- anything doubtful is held for a human, with a verification request already drafted.
 
 > Draft for human review only. Not financial advice. No payment is ever sent. All data is synthetic.
 
 ## What it does
 
 1. Six synthetic documents (invoices and emails) go to six **Extractor agents in parallel**.
-2. Each extraction is checked against the source and the vendor master by **deterministic checks**.
-3. An **Auditor agent** per document independently reviews the extraction, the check results, and fraud signals.
-4. A **payment policy** decides per document:
-   - **Ready**: all checks pass and the auditor approves. Included in the SEPA draft.
-   - **Needs human approval**: clean, but above the agent's spending limit (`APPROVAL_LIMIT_EUR`).
-   - **Blocked**: any failed check, auditor concern, or agent error.
-5. Output:
-   - `out/sepa-draft.xml`: ISO 20022 `pain.001.001.09` credit transfer draft for the ready payments.
-   - `out/review.md`: per-document decision, every value with its source quote, all checks and auditor issues.
+2. **Deterministic checks** test each extraction against the source document and the vendor master.
+3. An **Auditor agent** per document independently reviews the extraction, the check results and any fraud signals.
+4. If the bank details look wrong or fraudulent, a **Verifier agent** reacts to the Auditor's answer. It drafts a call-back request to the vendor's contact **on file**, never to whoever sent the document.
+5. A **payment policy** decides each document:
+   - **Ready**: all checks pass and the Auditor approves. Included in the SEPA draft.
+   - **Needs human approval**: clean, but above the agent's spending limit (`APPROVAL_LIMIT_EUR`). A human releases it with `--approve`.
+   - **Blocked**: any failed check, Auditor concern, or agent error. Blocked payments can't be approved past.
+6. Output:
+   - `out/sepa-draft.xml`: an ISO 20022 `pain.001.001.09` credit transfer draft for the released payments.
+   - `out/review.md`: the decision for each document, every value with its source quote, all checks, Auditor issues and verification drafts.
 
-The sample batch is built to exercise the checks:
+The sample batch is built to exercise every control:
 
-| Document | Scenario | Expected |
-| --- | --- | --- |
-| INV-1001 | Clean invoice | Ready |
-| INV-1002 | "Urgent, our bank details changed" email, IBAN differs from vendor master | Blocked |
-| INV-1003 | IBAN with a typo (checksum fails) | Blocked |
-| INV-1004 | EUR 12,400, above the agent limit | Needs human approval |
-| INV-1005 | Reminder email for INV-1001 (duplicate) | Blocked |
-| INV-1006 | Clean invoice | Ready |
+| Document | Scenario | What catches it | Result |
+| --- | --- | --- | --- |
+| INV-1001 | Clean invoice | – | Ready |
+| INV-1002 | "URGENT – new bank details" email from a lookalike domain | IBAN ≠ vendor master, sender domain ≠ vendor domain, Auditor | Blocked + verification request |
+| INV-1003 | IBAN with a typo | mod-97 checksum, vendor master, Auditor | Blocked + verification request |
+| INV-1004 | EUR 12,400, above the agent limit | approval policy | Needs human approval |
+| INV-1005 | Reminder email for INV-1001 | batch duplicate check | Blocked |
+| INV-1006 | Clean invoice | – | Ready |
 
 ## Architecture
 
 ```text
-                    ┌─────────────── shared RuntimeState: one case per document ───────────────┐
- document 1 ──> Extractor 1 ──> source + vendor checks ──> Auditor 1 ──┐
- document 2 ──> Extractor 2 ──> source + vendor checks ──> Auditor 2 ──┤
-    ...            (all in parallel)                                      ├──> duplicate check ──> payment policy ──> SEPA draft + review report
- document 6 ──> Extractor 6 ──> source + vendor checks ──> Auditor 6 ──┘
+                       shared Mozaik RuntimeState: one case per document
+                ┌─────────────────────────────────────────────────────────────────────┐
+ document 1 ──> Extractor 1 ─> source + vendor checks ─> Auditor 1 ─(bank issue?)─> Verifier 1 ─┐
+ document 2 ──> Extractor 2 ─> source + vendor checks ─> Auditor 2 ─────────────────────────────┤
+    ...              all documents in parallel, rate-limited model calls                      ├─> duplicate check ─> payment policy ─┬─> SEPA draft
+ document 6 ──> Extractor 6 ─> source + vendor checks ─> Auditor 6 ─────────────────────────────┘        (+ human --approve)        └─> review report
 ```
 
-- **Extractor agents** return JSON constrained by a JSON Schema through Mozaik's structured output. Each value comes with a `quote` copied from the document. If a model rejects the schema, the run retries without it and relies on the prompt contract and a tolerant parser.
-- **Source checks** (`src/parsing.ts`) reject any value whose quote is not in the document, or whose value does not match its quote. An invented number can't reach the payment file.
-- **Validation checks** (`src/checks.ts`): IBAN mod-97 checksum, EUR currency, known vendor, IBAN matches the vendor master, line items sum to the total, positive amount, and duplicates across the batch.
-- **Auditor agents** are a second, independent agent per document. They see the original, the extraction and the check results, and must cite evidence for each issue.
-- **Shared state** is a Mozaik `RuntimeState` holding one case per document. Every agent and check writes its result there, and the report is built from it.
-- **Usage**: token counts from `inference.completed` events are summed and shown in the console and the report.
-- **Safety**: each agent only reacts to its own predecessor and runs once. There's an overall timeout, and on timeout a partial report is still written.
+- **Agents react to each other through Mozaik events.** Each Auditor is triggered by its own Extractor's `model.answer`, and each Verifier by its own Auditor's. No agent reacts to its own output or to unrelated agents, so they can't loop.
+- **Structured output:** Extractor, Auditor and Verifier answers are constrained by JSON Schemas through Mozaik's `structuredOutput`. If a model rejects a schema, the run retries without it and relies on the prompt contract and a tolerant parser.
+- **Every number has a source** (`src/parsing.ts`):
+  - Extracted values whose quote isn't in the document, or doesn't match the value, are rejected.
+  - A Verifier draft that contains a figure not found in the document, the vendor master or the extraction is withheld.
+- **Validation checks** (`src/checks.ts`):
+  - IBAN mod-97 checksum, EUR currency, known vendor, IBAN matches the vendor master;
+  - the email sender's domain matches the vendor domain;
+  - line items sum to the total, the amount is positive, and no duplicates across the batch.
+- **Human in the loop:** payments above `APPROVAL_LIMIT_EUR` wait for `--approve <id>`. Approval never overrides a failed check or an Auditor concern.
+- **Resilience:**
+  - model calls are rate-limited (`REQUESTS_PER_MINUTE`);
+  - Gemini 429/503 errors are retried or moved to `FALLBACK_MODELS`;
+  - if everything fails, a partial report is still written.
+- **Usage:** token counts from `inference.completed` events are summed and shown in the console and the report.
 
 | File | Role |
 | --- | --- |
-| `src/index.ts` | Runtime, agents, wiring, output |
-| `src/prompts.ts` | Agent instructions with input/output contracts |
-| `src/parsing.ts` | JSON parsing and source verification |
-| `src/checks.ts` | Validation checks and payment policy |
+| `src/index.ts` | Runtime, agents, event wiring, retries, output |
+| `src/prompts.ts` | Agent instructions with input/output contracts and JSON Schemas |
+| `src/parsing.ts` | Answer parsing and source verification |
+| `src/checks.ts` | Validation checks, verification trigger, payment policy |
 | `src/sepa.ts` | pain.001 XML builder |
 | `src/report.ts` | Review report |
 | `src/data/` | Synthetic invoices, vendor master, debtor account |
@@ -62,7 +75,7 @@ The sample batch is built to exercise the checks:
 
 - Node.js 24+
 - npm
-- A Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+- A Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The free tier is enough.
 
 ## Run it
 
@@ -74,28 +87,35 @@ cp .env.example .env   # then set GEMINI_API_KEY
 npm run dev
 ```
 
-Then open `out/review.md` and `out/sepa-draft.xml`.
+A run takes about 1.5 minutes: 14 model calls at 10 per minute. Then open `out/review.md` and `out/sepa-draft.xml`.
+
+To act as the human approver for the payment above the limit:
+
+```bash
+npm run dev -- --approve INV-1004
+```
+
+INV-1004 is then included in the SEPA draft as "Approved by human". Trying `--approve INV-1002` has no effect, because blocked payments stay blocked.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `GEMINI_API_KEY` | yes | – | Google Gemini API key |
-| `GEMINI_MODEL` | no | `gemini-3.5-flash` | Model used by all agents |
-| `FALLBACK_MODELS` | no | – | Comma-separated [Mozaik-supported model ids](https://docs.jigjoy.ai/docs/models) to switch to on quota or overload errors, e.g. `claude-haiku-4-5` |
+| `GEMINI_MODEL` | no | `gemini-3.5-flash-lite` | Model used by all agents (free tier: 15 requests/min, 500/day) |
+| `FALLBACK_MODELS` | no | – | Comma-separated [Mozaik-supported model ids](https://docs.jigjoy.ai/docs/models) to switch to on quota or overload errors, e.g. `gemini-3.5-flash,claude-haiku-4-5` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | only for those fallbacks | – | Key for a non-Gemini fallback model |
+| `REQUESTS_PER_MINUTE` | no | `10` | Client-side rate limit for model calls. Use `5` with `gemini-3.5-flash` on the free tier |
 | `RUN_TIMEOUT_MS` | no | `600000` | Stop and write a partial report after this time |
-| `REQUESTS_PER_MINUTE` | no | `5` | Client-side rate limit for model calls (Gemini Flash free tier is 5/min). Raise it on paid keys for a faster run |
 | `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
 
 ## Troubleshooting
 
 - **Retries:**
-  - On **503/500** (Gemini overloaded), pending agents are retried twice with backoff, then moved to the next model in `FALLBACK_MODELS`.
-  - On **429 per-minute** limits, they wait for Gemini's `retryDelay` and retry on the same model.
-  - On **429 daily quota**, they switch to the next fallback model straight away.
-- **Speed:** with the default `REQUESTS_PER_MINUTE=5`, a full run (12 model calls) takes about 3 minutes.
-- **`model call failed (429)`** after retries: the Gemini free tier allows about 20 requests per day per model, and one run makes at least 12 (6 Extractors + 6 Auditors). Set `FALLBACK_MODELS` (e.g. `claude-haiku-4-5` with `ANTHROPIC_API_KEY`), wait for the reset, or enable billing on the key. Only Mozaik-supported ids work. Gemini has `gemini-3.5-flash` and `gemini-3.1-pro-preview`.
+  - **503/500** (Gemini overloaded): pending agents are retried twice with backoff, then moved to the next model in `FALLBACK_MODELS`.
+  - **429 per-minute limit:** they wait Gemini's `retryDelay` and retry on the same model.
+  - **429 daily quota:** they switch to the next fallback model straight away.
+- **`model call failed (429)` after retries:** the free-tier daily quota for that model is used up. Set `FALLBACK_MODELS`, wait for the reset, or enable billing on the key.
 - If every model fails, the run still writes `out/review.md`, and the affected documents are marked Blocked with the error.
-- **`mozaik cloud: no API key`**: optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch the agent loops live on JigJoy, or ignore it.
+- **`mozaik cloud: no API key`:** optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch every agent loop live on JigJoy, or ignore the message.
 
 ## Scripts
 
@@ -109,9 +129,9 @@ npm start          # Run the compiled build
 
 ## Ground rules
 
-- **Synthetic data only.** All companies, IBANs and invoices are made up.
-- **Every number has a source.** Each value in the report shows the document and the exact quote it came from.
-- **Not financial advice.** The report and console output say so. Nothing is sent to a bank.
+- **Synthetic data only.** All companies, IBANs, emails and invoices are made up.
+- **Every number has a source.** Each value in the report shows the exact quote it came from, and agent drafts with unsourced figures are withheld.
+- **Not financial advice.** The report and console output say so. Nothing is sent to a bank or a vendor.
 
 ## Hackathon
 
