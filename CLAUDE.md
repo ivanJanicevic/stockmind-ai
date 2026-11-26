@@ -24,8 +24,8 @@ Per document: Extractor agent → deterministic checks → Auditor agent. All do
 
 ## Unverified Mozaik details
 
-The Mozaik source wasn't available when this was written (registry and GitHub blocked). Confirm these in `node_modules/@mozaik-ai/core` and the docs:
-- the `model.answer` payload shape (`answerText` guesses `text`/`content`/`answer`/`message`);
-- whether `RuntimeState` subclasses can hold fields, and whether `SituationSpecification` subclasses can take constructor args;
-- whether a failed `runLoop` emits an error event (we only catch thrown or rejected errors);
-- native structured output (JSON Schema on `InferenceInput`), which could replace prompt-level JSON.
+Still to confirm in `node_modules/@mozaik-ai/core` or a real run:
+- the exact `ModelMessageItem` fields inside `model.answer`'s `{ answer }` payload (`answerText` searches recursively);
+- whether Gemini accepts our strict structured-output schemas (if not, the run retries without them).
+
+Confirmed from docs.jigjoy.ai: `runLoop` returns void and its errors aren't routed to the bus (hence the process-level handlers); `RuntimeState` subclasses and spec constructors typecheck against the real package; only listed model ids work (Gemini: `gemini-3.5-flash`, `gemini-3.1-pro-preview`).

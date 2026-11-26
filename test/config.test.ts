@@ -26,7 +26,7 @@ test('reads overrides', () => {
     loadConfig({
       GEMINI_API_KEY: 'k',
       GEMINI_MODEL: 'm',
-      GEMINI_FALLBACK_MODELS: ' f1, ,f2 ',
+      FALLBACK_MODELS: ' f1, ,f2 ',
       RUN_TIMEOUT_MS: '5000',
       APPROVAL_LIMIT_EUR: '1000.5',
     }),

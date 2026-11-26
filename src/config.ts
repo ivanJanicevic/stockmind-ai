@@ -35,7 +35,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   return {
     models: [
       env.GEMINI_MODEL?.trim() || DEFAULT_MODEL,
-      ...(env.GEMINI_FALLBACK_MODELS ?? '')
+      ...(env.FALLBACK_MODELS ?? '')
         .split(',')
         .map((m) => m.trim())
         .filter(Boolean),

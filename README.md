@@ -40,11 +40,12 @@ The sample batch is built to exercise the checks:
  document 6 ──> Extractor 6 ──> source + vendor checks ──> Auditor 6 ──┘
 ```
 
-- **Extractor agents** return strict JSON. Each value comes with a `quote` copied from the document.
+- **Extractor agents** return JSON constrained by a JSON Schema through Mozaik's structured output. Each value comes with a `quote` copied from the document. If a model rejects the schema, the run retries without it and relies on the prompt contract and a tolerant parser.
 - **Source checks** (`src/parsing.ts`) reject any value whose quote is not in the document, or whose value does not match its quote. An invented number can't reach the payment file.
 - **Validation checks** (`src/checks.ts`): IBAN mod-97 checksum, EUR currency, known vendor, IBAN matches the vendor master, line items sum to the total, positive amount, and duplicates across the batch.
 - **Auditor agents** are a second, independent agent per document. They see the original, the extraction and the check results, and must cite evidence for each issue.
 - **Shared state** is a Mozaik `RuntimeState` holding one case per document. Every agent and check writes its result there, and the report is built from it.
+- **Usage**: token counts from `inference.completed` events are summed and shown in the console and the report.
 - **Safety**: each agent only reacts to its own predecessor and runs once. There's an overall timeout, and on timeout a partial report is still written.
 
 | File | Role |
@@ -79,16 +80,17 @@ Then open `out/review.md` and `out/sepa-draft.xml`.
 | --- | --- | --- | --- |
 | `GEMINI_API_KEY` | yes | – | Google Gemini API key |
 | `GEMINI_MODEL` | no | `gemini-3.5-flash` | Model used by all agents |
-| `GEMINI_FALLBACK_MODELS` | no | – | Comma-separated models to switch to on quota or overload errors |
+| `FALLBACK_MODELS` | no | – | Comma-separated [Mozaik-supported model ids](https://docs.jigjoy.ai/docs/models) to switch to on quota or overload errors, e.g. `claude-haiku-4-5` |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | only for those fallbacks | – | Key for a non-Gemini fallback model |
 | `RUN_TIMEOUT_MS` | no | `180000` | Stop and write a partial report after this time |
 | `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
 
 ## Troubleshooting
 
 - **Retries:**
-  - On **503/500** (Gemini overloaded), pending agents are retried twice with backoff, then moved to the next model in `GEMINI_FALLBACK_MODELS`.
+  - On **503/500** (Gemini overloaded), pending agents are retried twice with backoff, then moved to the next model in `FALLBACK_MODELS`.
   - On **429** (quota exceeded), they switch to the next fallback model straight away.
-- **`model call failed (429)`** after retries: the Gemini free tier allows about 20 requests per day per model, and one run makes at least 12 (6 Extractors + 6 Auditors). Add fallback models (quota is counted per model), wait for the reset, or enable billing on the key.
+- **`model call failed (429)`** after retries: the Gemini free tier allows about 20 requests per day per model, and one run makes at least 12 (6 Extractors + 6 Auditors). Set `FALLBACK_MODELS` (e.g. `claude-haiku-4-5` with `ANTHROPIC_API_KEY`), wait for the reset, or enable billing on the key. Only Mozaik-supported ids work. Gemini has `gemini-3.5-flash` and `gemini-3.1-pro-preview`.
 - If every model fails, the run still writes `out/review.md`, and the affected documents are marked Blocked with the error.
 - **`mozaik cloud: no API key`**: optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch the agent loops live on JigJoy, or ignore it.
 
