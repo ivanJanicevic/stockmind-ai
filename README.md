@@ -1,125 +1,103 @@
 # StockMind AI
 
-**Multi-Agent AI Platform for Retail & Hospitality**
+**Agents in Finance: from invoices to a validated SEPA payment draft**
 
-StockMind AI is a multi-agent AI platform built with the Mozaik framework and Google Gemini. Its goal is to explore how autonomous AI agents can help retail and hospitality businesses improve inventory management, analyze sales, reduce waste, and support business decisions.
+Accounts payable teams receive invoices and emails in every format. Someone retypes the payment details, checks them, and catches the one email that says "our bank account has changed". StockMind AI hands that work to a team of Mozaik agents. Every value is traced back to its source document, and anything doubtful goes to a human.
 
-## Current Implementation
+> Draft for human review only. Not financial advice. No payment is ever sent. All data is synthetic.
 
-The initial prototype includes:
+## What it does
 
-- **Analyst Agent** – analyzes business problems and generates recommendations.
-- **Reviewer Agent** – independently evaluates the same request and provides another perspective.
-- **Monitoring Agent** – observes and logs agent responses and runtime events.
-- **Mozaik Runtime** – manages participants, events, and agent execution.
-- **Google Gemini** – powers AI inference.
+1. Six synthetic documents (invoices and emails) go to six **Extractor agents in parallel**.
+2. Each extraction is checked against the source and the vendor master by **deterministic checks**.
+3. An **Auditor agent** per document independently reviews the extraction, the check results, and fraud signals.
+4. A **payment policy** decides per document:
+   - **Ready**: all checks pass and the auditor approves. Included in the SEPA draft.
+   - **Needs human approval**: clean, but above the agent's spending limit (`APPROVAL_LIMIT_EUR`).
+   - **Blocked**: any failed check, auditor concern, or agent error.
+5. Output:
+   - `out/sepa-draft.xml`: ISO 20022 `pain.001.001.09` credit transfer draft for the ready payments.
+   - `out/review.md`: per-document decision, every value with its source quote, all checks and auditor issues.
 
-Currently, Analyst and Reviewer process the same input independently. Agent-to-agent collaboration and additional business workflows are planned for future development.
+The sample batch is built to exercise the checks:
 
-## Tech Stack
+| Document | Scenario | Expected |
+| --- | --- | --- |
+| INV-1001 | Clean invoice | Ready |
+| INV-1002 | "Urgent, our bank details changed" email, IBAN differs from vendor master | Blocked |
+| INV-1003 | IBAN with a typo (checksum fails) | Blocked |
+| INV-1004 | EUR 12,400, above the agent limit | Needs human approval |
+| INV-1005 | Reminder email for INV-1001 (duplicate) | Blocked |
+| INV-1006 | Clean invoice | Ready |
 
-- Node.js
-- TypeScript
-- Mozaik AI (`@mozaik-ai/core`)
-- Google Gemini API
-- dotenv
-- tsx
-- npm
+## Architecture
+
+```text
+                    ┌─────────────── shared RuntimeState: one case per document ───────────────┐
+ document 1 ──> Extractor 1 ──> source + vendor checks ──> Auditor 1 ──┐
+ document 2 ──> Extractor 2 ──> source + vendor checks ──> Auditor 2 ──┤
+    ...            (all in parallel)                                      ├──> duplicate check ──> payment policy ──> SEPA draft + review report
+ document 6 ──> Extractor 6 ──> source + vendor checks ──> Auditor 6 ──┘
+```
+
+- **Extractor agents** return strict JSON. Each value comes with a `quote` copied from the document.
+- **Source checks** (`src/parsing.ts`) reject any value whose quote is not in the document, or whose value does not match its quote. An invented number can't reach the payment file.
+- **Validation checks** (`src/checks.ts`): IBAN mod-97 checksum, EUR currency, known vendor, IBAN matches the vendor master, line items sum to the total, positive amount, and duplicates across the batch.
+- **Auditor agents** are a second, independent agent per document. They see the original, the extraction and the check results, and must cite evidence for each issue.
+- **Shared state** is a Mozaik `RuntimeState` holding one case per document. Every agent and check writes its result there, and the report is built from it.
+- **Safety**: each agent only reacts to its own predecessor and runs once. There's an overall timeout, and on timeout a partial report is still written.
+
+| File | Role |
+| --- | --- |
+| `src/index.ts` | Runtime, agents, wiring, output |
+| `src/prompts.ts` | Agent instructions with input/output contracts |
+| `src/parsing.ts` | JSON parsing and source verification |
+| `src/checks.ts` | Validation checks and payment policy |
+| `src/sepa.ts` | pain.001 XML builder |
+| `src/report.ts` | Review report |
+| `src/data/` | Synthetic invoices, vendor master, debtor account |
 
 ## Prerequisites
 
-Before running the application, make sure you have:
-
-- Node.js (Node.js 24 is the version used during development)
+- Node.js 24+
 - npm
-- A Google Gemini API key
+- A Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
 
-You can obtain a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
-
-## Installation
-
-Clone the repository:
+## Run it
 
 ```bash
 git clone https://github.com/ivanJanicevic/stockmind-ai.git
-```
-
-Navigate to the project directory:
-
-```bash
 cd stockmind-ai
-```
-
-Install dependencies:
-
-```bash
 npm install
-```
-
-## Environment Configuration
-
-Create a `.env` file in the project root:
-
-```bash
-touch .env
-```
-
-Add your Gemini API key:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key
-```
-
-Never commit your `.env` file or expose your API key.
-
-## Running Locally
-
-Start the development server:
-
-```bash
+cp .env.example .env   # then set GEMINI_API_KEY
 npm run dev
 ```
 
-The application initializes the Mozaik runtime, joins the Analyst, Reviewer, Monitoring, and User participants, and sends an initial business analysis request.
+Then open `out/review.md` and `out/sepa-draft.xml`.
 
-You should see the runtime initialization messages and agent responses in the terminal.
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `GEMINI_API_KEY` | yes | – | Google Gemini API key |
+| `GEMINI_MODEL` | no | `gemini-3.5-flash` | Model used by all agents |
+| `RUN_TIMEOUT_MS` | no | `180000` | Stop and write a partial report after this time |
+| `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
 
-## Available Scripts
+## Scripts
 
 ```bash
-npm run dev      # Run the application in development mode
-npm run build    # Compile TypeScript
-npm start        # Run the compiled application
+npm run dev        # Run the agents (calls Gemini)
+npm test           # Unit tests, no API calls
+npm run typecheck  # Type-check
+npm run build      # Compile to dist/
+npm start          # Run the compiled build
 ```
 
-## Project Structure
+## Ground rules
 
-```text
-stockmind-ai/
-├── src/
-│   └── index.ts
-├── .env
-├── .gitignore
-├── package.json
-├── package-lock.json
-├── tsconfig.json
-└── README.md
-```
+- **Synthetic data only.** All companies, IBANs and invoices are made up.
+- **Every number has a source.** Each value in the report shows the document and the exact quote it came from.
+- **Not financial advice.** The report and console output say so. Nothing is sent to a bank.
 
-## Planned Features
+## Hackathon
 
-- Agent-to-agent communication and collaboration.
-- Manager Agent for combining recommendations.
-- Inventory and stock-level analysis.
-- Sales and demand forecasting.
-- Expiration-date monitoring.
-- Food waste reduction recommendations.
-- Business intelligence dashboard.
-- Real-time agent execution monitoring.
-
-## Hackathon Project
-
-Built as part of the JigJoy Hackathon, exploring multi-agent AI systems and practical business automation.
-
-**Status:** Initial prototype / Active development.
-
+Built for the JigJoy hackathon, *Agents in Finance* track, on [Mozaik](https://www.npmjs.com/package/@mozaik-ai/core).
