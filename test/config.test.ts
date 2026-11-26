@@ -7,7 +7,14 @@ import {
   DEFAULT_TIMEOUT_MS,
   DEFAULT_APPROVAL_LIMIT_EUR,
   DEFAULT_REQUESTS_PER_MINUTE,
+  parseApprovals,
 } from '../src/config.js';
+
+test('parseApprovals reads --approve lists and repeats', () => {
+  assert.deepEqual(parseApprovals(['--approve', 'INV-1004,inv-1006']), ['INV-1004', 'INV-1006']);
+  assert.deepEqual(parseApprovals(['--approve=INV-1004', '--approve', 'INV-1001']), ['INV-1004', 'INV-1001']);
+  assert.deepEqual(parseApprovals([]), []);
+});
 
 test('fails when GEMINI_API_KEY is missing', () => {
   assert.throws(() => loadConfig({}), /GEMINI_API_KEY/);

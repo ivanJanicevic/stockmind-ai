@@ -5,9 +5,10 @@ export interface Config {
   requestsPerMinute: number;
 }
 
-export const DEFAULT_MODEL = 'gemini-3.5-flash';
+// Free tier: 15 requests/min and 500/day, vs 5/min and 20/day for gemini-3.5-flash.
+export const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 export const DEFAULT_TIMEOUT_MS = 600_000;
-export const DEFAULT_REQUESTS_PER_MINUTE = 5; // Gemini Flash free tier
+export const DEFAULT_REQUESTS_PER_MINUTE = 10; // under the Flash Lite free tier's 15
 export const DEFAULT_APPROVAL_LIMIT_EUR = 5_000;
 
 function positiveNumber(
@@ -23,6 +24,16 @@ function positiveNumber(
     throw new Error(`${name} must be a positive ${integer ? 'integer' : 'number'}, got "${raw}".`);
   }
   return n;
+}
+
+// `--approve INV-1004,INV-1005` or `--approve=INV-1004` (repeatable).
+export function parseApprovals(argv: string[]): string[] {
+  const ids: string[] = [];
+  argv.forEach((arg, i) => {
+    const value = arg.startsWith('--approve=') ? arg.slice('--approve='.length) : arg === '--approve' ? argv[i + 1] : undefined;
+    if (value) ids.push(...value.split(',').map((id) => id.trim().toUpperCase()).filter(Boolean));
+  });
+  return ids;
 }
 
 // GEMINI_API_KEY is read by Mozaik itself; we only check it exists so a
