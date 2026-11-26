@@ -79,8 +79,18 @@ Then open `out/review.md` and `out/sepa-draft.xml`.
 | --- | --- | --- | --- |
 | `GEMINI_API_KEY` | yes | – | Google Gemini API key |
 | `GEMINI_MODEL` | no | `gemini-3.5-flash` | Model used by all agents |
+| `GEMINI_FALLBACK_MODELS` | no | – | Comma-separated models to switch to on quota or overload errors |
 | `RUN_TIMEOUT_MS` | no | `180000` | Stop and write a partial report after this time |
 | `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
+
+## Troubleshooting
+
+- **Retries:**
+  - On **503/500** (Gemini overloaded), pending agents are retried twice with backoff, then moved to the next model in `GEMINI_FALLBACK_MODELS`.
+  - On **429** (quota exceeded), they switch to the next fallback model straight away.
+- **`model call failed (429)`** after retries: the Gemini free tier allows about 20 requests per day per model, and one run makes at least 12 (6 Extractors + 6 Auditors). Add fallback models (quota is counted per model), wait for the reset, or enable billing on the key.
+- If every model fails, the run still writes `out/review.md`, and the affected documents are marked Blocked with the error.
+- **`mozaik cloud: no API key`**: optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch the agent loops live on JigJoy, or ignore it.
 
 ## Scripts
 
