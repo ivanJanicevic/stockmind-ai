@@ -1,0 +1,583 @@
+{
+  "izmisljeni_podaci": true,
+  "napomena": "Potrošnja sirovine po 1 kom prodatog artikla, u jm_normativa. 1 jm sa otpremnice = faktor jm_normativa. Flaširani/pakovani artikli se troše 1:1 sa stavkom otpremnice (polje naziv_otpremnica).",
+  "sirovine": {
+    "kafa_espresso": {
+      "naziv_otpremnica": "Espresso kafa u zrnu 1 kg",
+      "jm_normativa": "g",
+      "faktor": 1000,
+      "sifre_dobavljaca": [
+        "ZP-ESP-1000"
+      ]
+    },
+    "kafa_bez_kofeina": {
+      "naziv_otpremnica": "Espresso bez kofeina u zrnu 1 kg",
+      "jm_normativa": "g",
+      "faktor": 1000,
+      "sifre_dobavljaca": [
+        "ZP-DEK-1000"
+      ]
+    },
+    "kafa_domaca": {
+      "naziv_otpremnica": "Domaća kafa mlevena 200 g",
+      "jm_normativa": "g",
+      "faktor": 200,
+      "sifre_dobavljaca": [
+        "ZP-DOM-0200"
+      ]
+    },
+    "kafa_instant": {
+      "naziv_otpremnica": "Instant kafa 500 g",
+      "jm_normativa": "g",
+      "faktor": 500,
+      "sifre_dobavljaca": [
+        "ZP-INS-0500"
+      ]
+    },
+    "cokolada_prah": {
+      "naziv_otpremnica": "Topla čokolada prah 1 kg",
+      "jm_normativa": "g",
+      "faktor": 1000,
+      "sifre_dobavljaca": [
+        "ZP-KAK-1000"
+      ]
+    },
+    "caj_kesica": {
+      "naziv_otpremnica": "Čaj asortiman (20 kesica)",
+      "jm_normativa": "kom",
+      "faktor": 20,
+      "sifre_dobavljaca": [
+        "ZP-CAJ-0020"
+      ]
+    },
+    "secer": {
+      "naziv_otpremnica": "Šećer u kesicama 5 g",
+      "jm_normativa": "kom",
+      "faktor": 1000,
+      "sifre_dobavljaca": [
+        "ZP-SEC-0005"
+      ]
+    },
+    "mleko_trajno": {
+      "naziv_otpremnica": "Mleko trajno 2,8% m.m. 1 l",
+      "jm_normativa": "l",
+      "faktor": 1,
+      "sifre_dobavljaca": [
+        "MD-ML-1000",
+        "ZP-MLK-1000"
+      ]
+    },
+    "mleko_barista": {
+      "naziv_otpremnica": "Mleko za barista 3,5% 1 l",
+      "jm_normativa": "l",
+      "faktor": 1,
+      "sifre_dobavljaca": [
+        "MD-MB-3510"
+      ]
+    },
+    "biljni_ovas": {
+      "naziv_otpremnica": "Biljni napitak ovas 1 l",
+      "jm_normativa": "l",
+      "faktor": 1,
+      "sifre_dobavljaca": [
+        "MD-MB-1000"
+      ]
+    },
+    "pavlaka": {
+      "naziv_otpremnica": "Pavlaka za šlag 35% 0,5 l",
+      "jm_normativa": "l",
+      "faktor": 0.5,
+      "sifre_dobavljaca": [
+        "MD-SL-0500"
+      ]
+    },
+    "sirup_karamel": {
+      "naziv_otpremnica": "Sirup karamel 0,75 l",
+      "jm_normativa": "l",
+      "faktor": 0.75,
+      "sifre_dobavljaca": [
+        "ZP-SIR-0750"
+      ]
+    },
+    "casa_300": {
+      "naziv_otpremnica": "Papirne čaše 300 ml",
+      "jm_normativa": "kom",
+      "faktor": 50,
+      "sifre_dobavljaca": [
+        "ZP-CAS-0300"
+      ]
+    },
+    "pivo_keg": {
+      "naziv_otpremnica": "Točeno pivo keg 30 l",
+      "jm_normativa": "l",
+      "faktor": 30,
+      "sifre_dobavljaca": [
+        "HS-KEG-030"
+      ]
+    }
+  },
+  "normativi": [
+    {
+      "sifra_artikla": 101,
+      "naziv": "Espresso",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 102,
+      "naziv": "Makijato",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_trajno",
+          "kolicina": 0.03,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 103,
+      "naziv": "Kapućino",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_trajno",
+          "kolicina": 0.15,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 104,
+      "naziv": "Kafa latte",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_barista",
+          "kolicina": 0.22,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 105,
+      "naziv": "Kapućino ovas",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "biljni_ovas",
+          "kolicina": 0.15,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 106,
+      "naziv": "Karamel latte",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_barista",
+          "kolicina": 0.22,
+          "jm": "l"
+        },
+        {
+          "sirovina": "sirup_karamel",
+          "kolicina": 0.02,
+          "jm": "l"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 107,
+      "naziv": "Bečka kafa",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "pavlaka",
+          "kolicina": 0.04,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 108,
+      "naziv": "Espresso bez kofeina",
+      "sastav": [
+        {
+          "sirovina": "kafa_bez_kofeina",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 109,
+      "naziv": "Kapućino za poneti",
+      "sastav": [
+        {
+          "sirovina": "kafa_espresso",
+          "kolicina": 7,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_trajno",
+          "kolicina": 0.15,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        },
+        {
+          "sirovina": "casa_300",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 110,
+      "naziv": "Domaća kafa",
+      "sastav": [
+        {
+          "sirovina": "kafa_domaca",
+          "kolicina": 10,
+          "jm": "g"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 111,
+      "naziv": "Nes kafa",
+      "sastav": [
+        {
+          "sirovina": "kafa_instant",
+          "kolicina": 3,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_trajno",
+          "kolicina": 0.12,
+          "jm": "l"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 2,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 112,
+      "naziv": "Topla čokolada",
+      "sastav": [
+        {
+          "sirovina": "cokolada_prah",
+          "kolicina": 25,
+          "jm": "g"
+        },
+        {
+          "sirovina": "mleko_trajno",
+          "kolicina": 0.2,
+          "jm": "l"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 113,
+      "naziv": "Čaj",
+      "sastav": [
+        {
+          "sirovina": "caj_kesica",
+          "kolicina": 1,
+          "jm": "kom"
+        },
+        {
+          "sirovina": "secer",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 201,
+      "naziv": "Coca-Cola 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Coca-Cola 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 202,
+      "naziv": "Coca-Cola Zero 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Coca-Cola Zero 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 203,
+      "naziv": "Fanta 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Fanta pomorandža 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 204,
+      "naziv": "Sprite 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Sprite 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 205,
+      "naziv": "Cockta 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Cockta 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 206,
+      "naziv": "Schweppes Bitter Lemon 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Schweppes Bitter Lemon 0,25 l",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 207,
+      "naziv": "Schweppes Tonic 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Schweppes Tonic Water 0,25 l",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 208,
+      "naziv": "IVI pomorandža 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "IVI sok pomorandža 0,25 l",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 209,
+      "naziv": "Sok jabuka 0,2",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Sok jabuka 100% 0,2 l",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 210,
+      "naziv": "Ledeni čaj breskva 0,33",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Ledeni čaj breskva 0,33 l",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 211,
+      "naziv": "Energetsko piće 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Energetsko piće 0,25 l limenka",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 212,
+      "naziv": "Kisela voda 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Kisela voda 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 213,
+      "naziv": "Negazirana voda 0,25",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Negazirana voda 0,25 l staklo",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 301,
+      "naziv": "Jelen 0,5",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Jelen pivo 0,5 l povratna boca",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 302,
+      "naziv": "Lav 0,33",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Lav pivo 0,33 l povratna boca",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 303,
+      "naziv": "Heineken 0,33",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Heineken 0,33 l nepovratna boca",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 304,
+      "naziv": "Bezalkoholno pivo 0,33",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Bezalkoholno pivo 0,33 l",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 305,
+      "naziv": "Točeno pivo 0,5",
+      "sastav": [
+        {
+          "sirovina": "pivo_keg",
+          "kolicina": 0.5,
+          "jm": "l"
+        }
+      ]
+    },
+    {
+      "sifra_artikla": 405,
+      "naziv": "Jogurt 180 g",
+      "sastav": [
+        {
+          "naziv_otpremnica": "Jogurt 2,8% 180 g",
+          "kolicina": 1,
+          "jm": "kom"
+        }
+      ]
+    }
+  ]
+}

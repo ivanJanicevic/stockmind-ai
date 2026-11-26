@@ -1,0 +1,32 @@
+mesec;kategorija;opis;primalac;iznos_bez_pdv;pdv_stopa;pdv;iznos_sa_pdv;dokument
+2026-10;Kirija;Zakup lokala Ulica Primera 12;Nekretnine Primer d.o.o. (izmišljeno);95000,00;20;19000,00;114000,00;ugovor ZK-2024-07
+2026-10;Plate;Bruto zarade 1 barista + 1 konobar (pola radnog vremena);zaposleni;140000,00;0;0,00;140000,00;obračun zarada
+2026-10;Struja;Električna energija;Elektro Snabdevanje (izmišljeno);24500,00;20;4900,00;29400,00;račun
+2026-10;Voda;Voda i kanalizacija;Vodovod Primer (izmišljeno);4500,00;10;450,00;4950,00;račun
+2026-10;Komunalije;Iznošenje smeća;Gradska Čistoća Primer (izmišljeno);3000,00;10;300,00;3300,00;račun
+2026-10;Internet;Internet i telefon;Telekom Primer (izmišljeno);3500,00;20;700,00;4200,00;račun
+2026-10;ESIR;Pretplata za ESIR kasu;Kasa Soft d.o.o. (izmišljeno);2000,00;20;400,00;2400,00;račun
+2026-10;Knjigovodstvo;Knjigovodstvene usluge;Biro Brojka (izmišljeno);12000,00;20;2400,00;14400,00;račun
+2026-10;Marketing;Društvene mreže, oglasi;Agencija Primer (izmišljeno);6000,00;20;1200,00;7200,00;račun
+2026-10;Provizija kartice;Provizija banke za kartična plaćanja;Banka Primer (izmišljeno);4900,00;0;0,00;4900,00;izvod
+2026-11;Kirija;Zakup lokala Ulica Primera 12;Nekretnine Primer d.o.o. (izmišljeno);95000,00;20;19000,00;114000,00;ugovor ZK-2024-07
+2026-11;Plate;Bruto zarade 1 barista + 1 konobar (pola radnog vremena);zaposleni;140000,00;0;0,00;140000,00;obračun zarada
+2026-11;Struja;Električna energija;Elektro Snabdevanje (izmišljeno);28000,00;20;5600,00;33600,00;račun
+2026-11;Voda;Voda i kanalizacija;Vodovod Primer (izmišljeno);4500,00;10;450,00;4950,00;račun
+2026-11;Komunalije;Iznošenje smeća;Gradska Čistoća Primer (izmišljeno);3000,00;10;300,00;3300,00;račun
+2026-11;Internet;Internet i telefon;Telekom Primer (izmišljeno);3500,00;20;700,00;4200,00;račun
+2026-11;ESIR;Pretplata za ESIR kasu;Kasa Soft d.o.o. (izmišljeno);2000,00;20;400,00;2400,00;račun
+2026-11;Knjigovodstvo;Knjigovodstvene usluge;Biro Brojka (izmišljeno);12000,00;20;2400,00;14400,00;račun
+2026-11;Marketing;Društvene mreže, oglasi;Agencija Primer (izmišljeno);6000,00;20;1200,00;7200,00;račun
+2026-11;Provizija kartice;Provizija banke za kartična plaćanja;Banka Primer (izmišljeno);4900,00;0;0,00;4900,00;izvod
+2026-12;Kirija;Zakup lokala Ulica Primera 12 (aneks: +15% od 01.12.2026);Nekretnine Primer d.o.o. (izmišljeno);109250,00;20;21850,00;131100,00;aneks ZK-2024-07/2
+2026-12;Plate;Bruto zarade 1 barista + 1 konobar (pola radnog vremena);zaposleni;140000,00;0;0,00;140000,00;obračun zarada
+2026-12;Struja;Električna energija (nova tarifa + grejanje);Elektro Snabdevanje (izmišljeno);46000,00;20;9200,00;55200,00;račun
+2026-12;Voda;Voda i kanalizacija;Vodovod Primer (izmišljeno);4500,00;10;450,00;4950,00;račun
+2026-12;Komunalije;Iznošenje smeća;Gradska Čistoća Primer (izmišljeno);3000,00;10;300,00;3300,00;račun
+2026-12;Internet;Internet i telefon;Telekom Primer (izmišljeno);3500,00;20;700,00;4200,00;račun
+2026-12;ESIR;Pretplata za ESIR kasu;Kasa Soft d.o.o. (izmišljeno);2000,00;20;400,00;2400,00;račun
+2026-12;Knjigovodstvo;Knjigovodstvene usluge;Biro Brojka (izmišljeno);12000,00;20;2400,00;14400,00;račun
+2026-12;Marketing;Društvene mreže, oglasi;Agencija Primer (izmišljeno);6000,00;20;1200,00;7200,00;račun
+2026-12;Provizija kartice;Provizija banke za kartična plaćanja;Banka Primer (izmišljeno);5200,00;0;0,00;5200,00;izvod
+2026-12;Održavanje;Hitan servis espresso aparata (zamena pumpe);Servis Aparata Primer (izmišljeno);18000,00;20;3600,00;21600,00;račun
