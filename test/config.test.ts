@@ -6,6 +6,7 @@ import {
   DEFAULT_MODEL,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_APPROVAL_LIMIT_EUR,
+  DEFAULT_REQUESTS_PER_MINUTE,
 } from '../src/config.js';
 
 test('fails when GEMINI_API_KEY is missing', () => {
@@ -18,6 +19,7 @@ test('uses defaults', () => {
     models: [DEFAULT_MODEL],
     timeoutMs: DEFAULT_TIMEOUT_MS,
     approvalLimitEur: DEFAULT_APPROVAL_LIMIT_EUR,
+    requestsPerMinute: DEFAULT_REQUESTS_PER_MINUTE,
   });
 });
 
@@ -29,8 +31,9 @@ test('reads overrides', () => {
       FALLBACK_MODELS: ' f1, ,f2 ',
       RUN_TIMEOUT_MS: '5000',
       APPROVAL_LIMIT_EUR: '1000.5',
+      REQUESTS_PER_MINUTE: '15',
     }),
-    { models: ['m', 'f1', 'f2'], timeoutMs: 5000, approvalLimitEur: 1000.5 }
+    { models: ['m', 'f1', 'f2'], timeoutMs: 5000, approvalLimitEur: 1000.5, requestsPerMinute: 15 }
   );
 });
 

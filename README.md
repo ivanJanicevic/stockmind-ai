@@ -82,14 +82,17 @@ Then open `out/review.md` and `out/sepa-draft.xml`.
 | `GEMINI_MODEL` | no | `gemini-3.5-flash` | Model used by all agents |
 | `FALLBACK_MODELS` | no | – | Comma-separated [Mozaik-supported model ids](https://docs.jigjoy.ai/docs/models) to switch to on quota or overload errors, e.g. `claude-haiku-4-5` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | only for those fallbacks | – | Key for a non-Gemini fallback model |
-| `RUN_TIMEOUT_MS` | no | `180000` | Stop and write a partial report after this time |
+| `RUN_TIMEOUT_MS` | no | `600000` | Stop and write a partial report after this time |
+| `REQUESTS_PER_MINUTE` | no | `5` | Client-side rate limit for model calls (Gemini Flash free tier is 5/min). Raise it on paid keys for a faster run |
 | `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
 
 ## Troubleshooting
 
 - **Retries:**
   - On **503/500** (Gemini overloaded), pending agents are retried twice with backoff, then moved to the next model in `FALLBACK_MODELS`.
-  - On **429** (quota exceeded), they switch to the next fallback model straight away.
+  - On **429 per-minute** limits, they wait for Gemini's `retryDelay` and retry on the same model.
+  - On **429 daily quota**, they switch to the next fallback model straight away.
+- **Speed:** with the default `REQUESTS_PER_MINUTE=5`, a full run (12 model calls) takes about 3 minutes.
 - **`model call failed (429)`** after retries: the Gemini free tier allows about 20 requests per day per model, and one run makes at least 12 (6 Extractors + 6 Auditors). Set `FALLBACK_MODELS` (e.g. `claude-haiku-4-5` with `ANTHROPIC_API_KEY`), wait for the reset, or enable billing on the key. Only Mozaik-supported ids work. Gemini has `gemini-3.5-flash` and `gemini-3.1-pro-preview`.
 - If every model fails, the run still writes `out/review.md`, and the affected documents are marked Blocked with the error.
 - **`mozaik cloud: no API key`**: optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch the agent loops live on JigJoy, or ignore it.

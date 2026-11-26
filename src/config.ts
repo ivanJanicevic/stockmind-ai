@@ -2,10 +2,12 @@ export interface Config {
   models: string[]; // primary first, then fallbacks
   timeoutMs: number;
   approvalLimitEur: number;
+  requestsPerMinute: number;
 }
 
 export const DEFAULT_MODEL = 'gemini-3.5-flash';
-export const DEFAULT_TIMEOUT_MS = 180_000;
+export const DEFAULT_TIMEOUT_MS = 600_000;
+export const DEFAULT_REQUESTS_PER_MINUTE = 5; // Gemini Flash free tier
 export const DEFAULT_APPROVAL_LIMIT_EUR = 5_000;
 
 function positiveNumber(
@@ -46,6 +48,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       'APPROVAL_LIMIT_EUR',
       DEFAULT_APPROVAL_LIMIT_EUR,
       false
+    ),
+    requestsPerMinute: positiveNumber(
+      env,
+      'REQUESTS_PER_MINUTE',
+      DEFAULT_REQUESTS_PER_MINUTE,
+      true
     ),
   };
 }

@@ -94,22 +94,47 @@ const currentModel = () => config.models[modelIndex] ?? config.models[0]!;
 // contract plus the tolerant parser take over.
 let useStructuredOutput = true;
 
+// Client-side rate limit (REQUESTS_PER_MINUTE): free tiers allow only a few
+// requests per minute, so model calls wait in a queue instead of all firing
+// at once. Sliding 60s window.
+const callQueue: (() => void)[] = [];
+const callTimes: number[] = [];
+let pumpTimer: NodeJS.Timeout | undefined;
+
+function pumpQueue(): void {
+  const now = Date.now();
+  while (callTimes.length && now - callTimes[0]! >= 60_000) callTimes.shift();
+  while (callQueue.length && callTimes.length < config.requestsPerMinute) {
+    callTimes.push(now);
+    callQueue.shift()!();
+  }
+  if (callQueue.length && !pumpTimer) {
+    pumpTimer = setTimeout(() => {
+      pumpTimer = undefined;
+      pumpQueue();
+    }, 60_000 - (now - callTimes[0]!) + 50);
+  }
+}
+
 // runLoop is fire-and-forget; provider errors usually surface as unhandled
 // rejections (see handleModelError), but catch direct failures too.
 function run(agent: Agent, c: InvoiceCase, message: string, output: OutputFormat): void {
   pendingLoops.set(c, { agent, message, output });
-  Promise.resolve()
-    .then(() =>
-      runLoop(agent.getId(), message, {
-        model: currentModel(),
-        context: agent.getMemory().getContext(),
-        tools: agent.getTools(),
-        ...(useStructuredOutput
-          ? { structuredOutput: { name: output.name, schema: output.schema, strict: true } }
-          : {}),
-      })
-    )
-    .catch(handleModelError);
+  callQueue.push(() => {
+    Promise.resolve()
+      .then(() =>
+        runLoop(agent.getId(), message, {
+          model: currentModel(),
+          context: agent.getMemory().getContext(),
+          tools: agent.getTools(),
+          ...(useStructuredOutput
+            ? { structuredOutput: { name: output.name, schema: output.schema, strict: true } }
+            : {}),
+        })
+      )
+      .catch(handleModelError);
+  });
+  pumpQueue();
 }
 
 const EXTRACTION_OUTPUT: OutputFormat = { name: 'invoice_extraction', schema: EXTRACTION_SCHEMA };
@@ -288,6 +313,17 @@ function abort(reason: string): void {
 
 // Provider errors (e.g. Gemini 429 quota, 503 overload) are raised inside
 // Mozaik's fire-and-forget loop, so they surface here, not in run().
+// Gemini 429 bodies say which quota was hit and when to retry, e.g.
+// quotaId "GenerateRequestsPerDayPerProjectPerModel-FreeTier", retryDelay "35s".
+function rateLimitInfo(error: unknown): { perDay: boolean; retryAfterMs: number | undefined } {
+  const message = (error as { message?: string } | null)?.message ?? '';
+  const delay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(message);
+  return {
+    perDay: /PerDay/i.test(message),
+    retryAfterMs: delay ? Math.ceil(Number(delay[1]) * 1000) : undefined,
+  };
+}
+
 function describeError(error: unknown): string {
   const e = error as { status?: number; message?: string };
   let message = e?.message ?? String(error);
@@ -300,12 +336,20 @@ function describeError(error: unknown): string {
 }
 
 // Error without HTTP status / 400 while structured output is on: retry once
-// without it. 503 (overloaded) / 500: retry the same model with backoff, then
-// fall back. 429 (quota): a daily quota won't recover, so fall back at once.
+// without it. 429 per-minute limit: wait retryDelay, same model. 429 daily
+// quota: won't recover today, so fall back at once. 503 (overloaded) / 500:
+// retry the same model with backoff, then fall back.
 // Mozaik doesn't tell us which loop failed, so every pending loop is re-run;
 // the run-once guards in the handlers ignore duplicate answers.
 const RETRYABLE = new Set([429, 500, 503]);
 const MAX_SAME_MODEL_RETRIES = 2;
+const MAX_RATE_LIMIT_RETRIES = 4;
+
+// A 429 we can wait out: not a daily quota, and retry within two minutes.
+function isShortRateLimit(error: unknown): boolean {
+  const { perDay, retryAfterMs } = rateLimitInfo(error);
+  return !perDay && (retryAfterMs === undefined || retryAfterMs <= 120_000);
+}
 let sameModelRetries = 0;
 let retryScheduled = false;
 
@@ -326,6 +370,11 @@ function handleModelError(error: unknown): void {
     action = 'without structured output';
   } else if (status === undefined || !RETRYABLE.has(status)) {
     return abort(describeError(error));
+  } else if (status === 429 && isShortRateLimit(error) && sameModelRetries < MAX_RATE_LIMIT_RETRIES) {
+    // Per-minute limit: wait for the window to reopen and stay on this model.
+    sameModelRetries++;
+    delayMs = rateLimitInfo(error).retryAfterMs ?? 30_000;
+    action = `on ${currentModel()} (rate limit)`;
   } else if (status !== 429 && sameModelRetries < MAX_SAME_MODEL_RETRIES) {
     sameModelRetries++;
     delayMs = 2000 * 2 ** sameModelRetries;
@@ -345,6 +394,7 @@ function handleModelError(error: unknown): void {
   );
   setTimeout(() => {
     retryScheduled = false;
+    callQueue.length = 0; // queued calls are pending too and get re-run below
     for (const [c, loop] of [...pendingLoops]) run(loop.agent, c, loop.message, loop.output);
   }, delayMs);
 }
@@ -358,7 +408,7 @@ setTimeout(
 );
 
 console.log(`StockMind AI — invoice to SEPA payment draft (models: ${config.models.join(' → ')})`);
-console.log(`${invoices.length} documents, ${invoices.length * 2} agents, approval limit EUR ${config.approvalLimitEur}\n`);
+console.log(`${invoices.length} documents, ${invoices.length * 2} agents, approval limit EUR ${config.approvalLimitEur}, max ${config.requestsPerMinute} model calls/min\n`);
 
 // All extractors start at once and run in parallel.
 for (const { agent, c } of extractors) {
