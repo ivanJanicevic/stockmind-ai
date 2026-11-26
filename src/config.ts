@@ -1,5 +1,5 @@
 export interface Config {
-  model: string;
+  models: string[]; // primary first, then fallbacks
   timeoutMs: number;
   approvalLimitEur: number;
 }
@@ -33,7 +33,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   }
 
   return {
-    model: env.GEMINI_MODEL?.trim() || DEFAULT_MODEL,
+    models: [
+      env.GEMINI_MODEL?.trim() || DEFAULT_MODEL,
+      ...(env.GEMINI_FALLBACK_MODELS ?? '')
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean),
+    ],
     timeoutMs: positiveNumber(env, 'RUN_TIMEOUT_MS', DEFAULT_TIMEOUT_MS, true),
     approvalLimitEur: positiveNumber(
       env,
