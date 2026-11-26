@@ -34,6 +34,11 @@ test('parseExtraction accepts JSON wrapped in prose or code fences', () => {
   if (parsed.ok) assert.deepEqual(parsed.value, good);
 });
 
+test('parseExtraction treats an empty BIC as missing', () => {
+  const parsed = parseExtraction(JSON.stringify({ ...good, bic: { value: '', quote: '' } }));
+  assert.equal(parsed.ok && parsed.value.bic, null);
+});
+
 test('parseExtraction rejects missing quotes and non-JSON', () => {
   const noQuote = { ...good, totalAmount: { value: 1428 } };
   assert.equal(parseExtraction(JSON.stringify(noQuote)).ok, false);

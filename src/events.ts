@@ -24,6 +24,13 @@ export class WhenAnyAnswer extends SituationSpecification {
   }
 }
 
+// Carries tokenUsage for each model call.
+export class WhenInferenceCompleted extends SituationSpecification {
+  isSatisfiedBy({ event }: SituationContext): boolean {
+    return event.type === 'inference.completed';
+  }
+}
+
 const TEXT_KEYS = ['text', 'content', 'answer', 'message', 'output', 'parts', 'result', 'data'];
 
 // Finds the model's text in a model.answer payload. Providers nest it

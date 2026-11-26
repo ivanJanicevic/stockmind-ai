@@ -73,7 +73,11 @@ export function parseExtraction(answer: string): Parsed<Extraction> {
         invoiceNumber: sourced(raw.invoiceNumber, 'invoiceNumber', isString),
         vendorName: sourced(raw.vendorName, 'vendorName', isString),
         iban: sourced(raw.iban, 'iban', isString),
-        bic: raw.bic == null ? null : sourced(raw.bic, 'bic', isString),
+        // A missing BIC may come back as null or as an empty value.
+        bic:
+          raw.bic == null || (isObject(raw.bic) && raw.bic.value === '')
+            ? null
+            : sourced(raw.bic, 'bic', isString),
         currency: sourced(raw.currency, 'currency', isString),
         totalAmount: sourced(raw.totalAmount, 'totalAmount', isNumber),
         dueDate: sourced(raw.dueDate, 'dueDate', isString),

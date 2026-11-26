@@ -16,7 +16,8 @@ const q = (s: string) => `"${s.replace(/\s+/g, ' ').replace(/\|/g, '\\|')}"`;
 export function buildReport(
   cases: InvoiceCase[],
   approvalLimit: number,
-  draftFile: string | null
+  draftFile: string | null,
+  usage?: string
 ): string {
   const lines: string[] = [
     '# Payment run review',
@@ -24,6 +25,7 @@ export function buildReport(
     `> ${DISCLAIMER}`,
     '',
     `Agent approval limit: ${money(approvalLimit)}. SEPA draft: ${draftFile ?? 'none (no payments ready)'}.`,
+    ...(usage ? ['', `Run: ${usage}.`] : []),
     '',
     '| Document | Vendor | Amount | Decision |',
     '| --- | --- | --- | --- |',

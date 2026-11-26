@@ -13,7 +13,12 @@ import {
 import { loadConfig, type Config } from './config.js';
 import { invoices } from './data/invoices.js';
 import { debtor, vendors } from './data/vendors.js';
-import { WhenAnswerFrom, WhenAnyAnswer, answerText } from './events.js';
+import {
+  WhenAnswerFrom,
+  WhenAnyAnswer,
+  WhenInferenceCompleted,
+  answerText,
+} from './events.js';
 import { parseAudit, parseExtraction } from './parsing.js';
 import {
   addDuplicateChecks,
@@ -27,11 +32,19 @@ import { buildReport, DISCLAIMER } from './report.js';
 import {
   EXTRACTOR_INSTRUCTION,
   AUDITOR_INSTRUCTION,
+  EXTRACTION_SCHEMA,
+  AUDIT_SCHEMA,
   extractorMessage,
   auditorMessage,
 } from './prompts.js';
 
 const OUT_DIR = 'out';
+
+interface TokenTotals {
+  inputTokens: number;
+  outputTokens: number;
+}
+const tokens = { input: 0, output: 0 };
 
 const preview = (text: string) =>
   '`' + text.replace(/\s+/g, ' ').slice(0, 300).replace(/`/g, "'") + '`';
@@ -63,25 +76,44 @@ const state = new AppState();
 const { initializeRuntime, join, runLoop } = defineRuntime<AppState>();
 initializeRuntime({ state });
 
+interface OutputFormat {
+  name: string;
+  schema: Record<string, unknown>;
+}
+
 // The agent loop each unfinished case is waiting on, so it can be retried.
-const pendingLoops = new Map<InvoiceCase, { agent: Agent; message: string }>();
+const pendingLoops = new Map<
+  InvoiceCase,
+  { agent: Agent; message: string; output: OutputFormat }
+>();
 let modelIndex = 0;
 const currentModel = () => config.models[modelIndex] ?? config.models[0]!;
 
+// Native JSON Schema output (Mozaik structuredOutput). If a model or provider
+// rejects it, handleModelError switches it off and the prompt-level JSON
+// contract plus the tolerant parser take over.
+let useStructuredOutput = true;
+
 // runLoop is fire-and-forget; provider errors usually surface as unhandled
 // rejections (see handleModelError), but catch direct failures too.
-function run(agent: Agent, c: InvoiceCase, message: string): void {
-  pendingLoops.set(c, { agent, message });
+function run(agent: Agent, c: InvoiceCase, message: string, output: OutputFormat): void {
+  pendingLoops.set(c, { agent, message, output });
   Promise.resolve()
     .then(() =>
       runLoop(agent.getId(), message, {
         model: currentModel(),
         context: agent.getMemory().getContext(),
         tools: agent.getTools(),
+        ...(useStructuredOutput
+          ? { structuredOutput: { name: output.name, schema: output.schema, strict: true } }
+          : {}),
       })
     )
     .catch(handleModelError);
 }
+
+const EXTRACTION_OUTPUT: OutputFormat = { name: 'invoice_extraction', schema: EXTRACTION_SCHEMA };
+const AUDIT_OUTPUT: OutputFormat = { name: 'payment_audit', schema: AUDIT_SCHEMA };
 
 // Per document: an Extractor, then an Auditor that checks the Extractor.
 // Each Auditor only reacts to its own Extractor, so agents can't loop.
@@ -127,7 +159,8 @@ for (const c of state.cases) {
             run(
               auditor,
               c,
-              auditorMessage(c.doc.file, c.doc.text, c.extraction, c.checks)
+              auditorMessage(c.doc.file, c.doc.text, c.extraction, c.checks),
+              AUDIT_OUTPUT
             );
           },
         },
@@ -164,6 +197,16 @@ const monitor = createHuman({
           else c.errors.push(`auditor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
           c.done = true;
           finishIfDone();
+        },
+      },
+    },
+    {
+      specification: new WhenInferenceCompleted(),
+      processor: {
+        apply({ event }) {
+          const usage = (event.payload as { tokenUsage?: Partial<TokenTotals> } | null)?.tokenUsage;
+          tokens.input += usage?.inputTokens ?? 0;
+          tokens.output += usage?.outputTokens ?? 0;
         },
       },
     },
@@ -218,13 +261,15 @@ function finish(exitCode: number): void {
   }
 
   const reportFile = `${OUT_DIR}/review.md`;
-  writeFileSync(reportFile, buildReport(state.cases, config.approvalLimitEur, draftFile));
+  const usage = `models: ${config.models.slice(0, modelIndex + 1).join(' → ')}; tokens: ${tokens.input} in / ${tokens.output} out`;
+  writeFileSync(reportFile, buildReport(state.cases, config.approvalLimitEur, draftFile, usage));
 
   console.log('');
   for (const c of state.cases) {
     console.log(`${c.doc.id}: ${decide(c, config.approvalLimitEur)}`);
   }
   console.log(`\nReport: ${reportFile}`);
+  console.log(`Usage: ${usage}`);
   if (draftFile) console.log(`SEPA draft: ${draftFile} (${payments.length} payments)`);
   console.log(`\n${DISCLAIMER}`);
 
@@ -254,8 +299,9 @@ function describeError(error: unknown): string {
   return `model call failed${e?.status ? ` (${e.status})` : ''}: ${message.split('\n')[0]}`;
 }
 
-// Gemini 503 (overloaded) / 500: retry the same model with backoff, then fall
-// back. 429 (quota): a daily quota won't recover, so fall back immediately.
+// Error without HTTP status / 400 while structured output is on: retry once
+// without it. 503 (overloaded) / 500: retry the same model with backoff, then
+// fall back. 429 (quota): a daily quota won't recover, so fall back at once.
 // Mozaik doesn't tell us which loop failed, so every pending loop is re-run;
 // the run-once guards in the handlers ignore duplicate answers.
 const RETRYABLE = new Set([429, 500, 503]);
@@ -269,29 +315,37 @@ function handleModelError(error: unknown): void {
   if (retryScheduled) return;
 
   const status = (error as { status?: number } | null)?.status;
-  if (status === undefined || !RETRYABLE.has(status) || pendingLoops.size === 0) {
-    return abort(describeError(error));
-  }
+  if (pendingLoops.size === 0) return abort(describeError(error));
 
   let delayMs: number;
-  if (status !== 429 && sameModelRetries < MAX_SAME_MODEL_RETRIES) {
+  let action: string;
+  if ((status === undefined || status === 400) && useStructuredOutput) {
+    // Most likely the structured output schema was rejected; retry without it.
+    useStructuredOutput = false;
+    delayMs = 500;
+    action = 'without structured output';
+  } else if (status === undefined || !RETRYABLE.has(status)) {
+    return abort(describeError(error));
+  } else if (status !== 429 && sameModelRetries < MAX_SAME_MODEL_RETRIES) {
     sameModelRetries++;
     delayMs = 2000 * 2 ** sameModelRetries;
+    action = `on ${currentModel()}`;
   } else if (modelIndex + 1 < config.models.length) {
     modelIndex++;
     sameModelRetries = 0;
     delayMs = 1000;
+    action = `on fallback model ${currentModel()}`;
   } else {
     return abort(describeError(error));
   }
 
   retryScheduled = true;
   console.error(
-    `[retry] ${describeError(error)}\n[retry] re-running ${pendingLoops.size} pending agent(s) on ${currentModel()} in ${delayMs / 1000}s`
+    `[retry] ${describeError(error)}\n[retry] re-running ${pendingLoops.size} pending agent(s) ${action} in ${delayMs / 1000}s`
   );
   setTimeout(() => {
     retryScheduled = false;
-    for (const [c, loop] of [...pendingLoops]) run(loop.agent, c, loop.message);
+    for (const [c, loop] of [...pendingLoops]) run(loop.agent, c, loop.message, loop.output);
   }, delayMs);
 }
 
@@ -308,5 +362,5 @@ console.log(`${invoices.length} documents, ${invoices.length * 2} agents, approv
 
 // All extractors start at once and run in parallel.
 for (const { agent, c } of extractors) {
-  run(agent, c, extractorMessage(c.doc.file, c.doc.text));
+  run(agent, c, extractorMessage(c.doc.file, c.doc.text), EXTRACTION_OUTPUT);
 }

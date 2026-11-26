@@ -7,7 +7,7 @@ One source document (invoice or email) with its file name, between <document> ta
 TASK
 Extract the payment details exactly as written. Do not correct, calculate, or guess anything:
 - If an IBAN looks wrong, copy it as written. Validation is done by other agents.
-- If a field is missing, use null for "bic"; for any other missing field, set "value" to "" and "quote" to "".
+- If a field is missing (including the BIC), set its "value" to "" and its "quote" to "".
 
 OUTPUT
 Return only one JSON object, no prose, no code fences:
@@ -15,7 +15,7 @@ Return only one JSON object, no prose, no code fences:
   "invoiceNumber": { "value": string, "quote": string },
   "vendorName":    { "value": string, "quote": string },
   "iban":          { "value": string with no spaces, "quote": string },
-  "bic":           { "value": string, "quote": string } | null,
+  "bic":           { "value": string, "quote": string },
   "currency":      { "value": ISO 4217 code like "EUR", "quote": string },
   "totalAmount":   { "value": number with dot decimal, e.g. 1428.00, "quote": string },
   "dueDate":       { "value": "YYYY-MM-DD", "quote": string },
@@ -54,6 +54,62 @@ RULES
 - "quote" is copied character for character from the document and shows the evidence. Use "" only if the issue is that something is missing.
 - Never introduce numbers that are not in the document or the checks.
 `;
+
+// JSON Schemas for Mozaik structured output. They mirror the OUTPUT sections
+// above and stay within the subset all providers accept in strict mode:
+// every property required, no additional properties, no nullable types.
+const sourced = (type: 'string' | 'number') => ({
+  type: 'object',
+  properties: { value: { type }, quote: { type: 'string' } },
+  required: ['value', 'quote'],
+  additionalProperties: false,
+});
+
+export const EXTRACTION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    invoiceNumber: sourced('string'),
+    vendorName: sourced('string'),
+    iban: sourced('string'),
+    bic: sourced('string'),
+    currency: sourced('string'),
+    totalAmount: sourced('number'),
+    dueDate: sourced('string'),
+    lineItems: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { description: { type: 'string' }, amount: sourced('number') },
+        required: ['description', 'amount'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['invoiceNumber', 'vendorName', 'iban', 'bic', 'currency', 'totalAmount', 'dueDate', 'lineItems'],
+  additionalProperties: false,
+};
+
+export const AUDIT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['ok', 'review'] },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          problem: { type: 'string' },
+          quote: { type: 'string' },
+        },
+        required: ['field', 'problem', 'quote'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['verdict', 'issues'],
+  additionalProperties: false,
+};
 
 export function extractorMessage(file: string, text: string): string {
   return `<document file="${file}">\n${text}\n</document>`;
