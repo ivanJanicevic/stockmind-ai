@@ -24,17 +24,28 @@ export class WhenAnyAnswer extends SituationSpecification {
   }
 }
 
-// The exact model.answer payload shape is not documented here, so take the
-// first string field we recognise and fall back to JSON.
-export function answerText(payload: unknown): string {
-  if (typeof payload === 'string') return payload;
+const TEXT_KEYS = ['text', 'content', 'answer', 'message', 'output', 'parts', 'result', 'data'];
 
-  if (payload && typeof payload === 'object') {
-    for (const key of ['text', 'content', 'answer', 'message']) {
-      const value = (payload as Record<string, unknown>)[key];
-      if (typeof value === 'string') return value;
+// Finds the model's text in a model.answer payload. Providers nest it
+// differently (plain string, { text }, content: [{ type: 'text', text }], ...).
+function findText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value.trim() ? value : undefined;
+
+  if (Array.isArray(value)) {
+    const parts = value.map(findText).filter((t): t is string => t !== undefined);
+    return parts.length ? parts.join('') : undefined;
+  }
+
+  if (value && typeof value === 'object') {
+    for (const key of TEXT_KEYS) {
+      const text = findText((value as Record<string, unknown>)[key]);
+      if (text !== undefined) return text;
     }
   }
 
-  return JSON.stringify(payload, null, 2);
+  return undefined;
+}
+
+export function answerText(payload: unknown): string {
+  return findText(payload) ?? JSON.stringify(payload, null, 2);
 }

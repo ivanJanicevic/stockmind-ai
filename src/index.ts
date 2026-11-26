@@ -33,6 +33,9 @@ import {
 
 const OUT_DIR = 'out';
 
+const preview = (text: string) =>
+  '`' + text.replace(/\s+/g, ' ').slice(0, 300).replace(/`/g, "'") + '`';
+
 function fail(message: string, error?: unknown): never {
   console.error(`\n[error] ${message}`, error ?? '');
   process.exit(1);
@@ -107,9 +110,10 @@ for (const c of state.cases) {
             if (audited) return;
             audited = true;
 
-            const parsed = parseExtraction(answerText(event.payload));
+            const answer = answerText(event.payload);
+            const parsed = parseExtraction(answer);
             if (!parsed.ok) {
-              c.errors.push(`extractor answer rejected: ${parsed.error}`);
+              c.errors.push(`extractor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
               c.done = true;
               finishIfDone();
               return;
@@ -150,9 +154,10 @@ const monitor = createHuman({
           const c = auditorCase.get(event.producerId);
           if (!c || c.done) return;
 
-          const parsed = parseAudit(answerText(event.payload));
+          const answer = answerText(event.payload);
+          const parsed = parseAudit(answer);
           if (parsed.ok) c.audit = parsed.value;
-          else c.errors.push(`auditor answer rejected: ${parsed.error}`);
+          else c.errors.push(`auditor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
           c.done = true;
           finishIfDone();
         },
@@ -164,8 +169,10 @@ join(monitor);
 
 let finished = false;
 
+// Deferred so the other handlers for the same event (e.g. monitor logging)
+// run before the process exits.
 function finishIfDone(): void {
-  if (!finished && state.cases.every((c) => c.done)) finish(0);
+  if (!finished && state.cases.every((c) => c.done)) setImmediate(() => finish(0));
 }
 
 function finish(exitCode: number): void {

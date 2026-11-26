@@ -30,3 +30,13 @@ test('answerText extracts text from common payload shapes', () => {
   assert.equal(answerText({ content: 'b' }), 'b');
   assert.equal(answerText({ other: 1 }), JSON.stringify({ other: 1 }, null, 2));
 });
+
+test('answerText finds text nested in content parts', () => {
+  assert.equal(
+    answerText({ role: 'assistant', content: [{ type: 'text', text: '{"a":' }, { type: 'text', text: '1}' }] }),
+    '{"a":1}'
+  );
+  assert.equal(answerText({ message: { content: [{ text: 'x' }] } }), 'x');
+  assert.equal(answerText({ output: [{ content: [{ type: 'output_text', text: 'y' }] }] }), 'y');
+  assert.equal(answerText({ content: [], text: '' , answer: 'z' }), 'z');
+});
