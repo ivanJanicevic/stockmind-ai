@@ -10,7 +10,7 @@ import {
   type Agent,
 } from '@mozaik-ai/core';
 
-import { loadConfig, type Config } from './config.js';
+import { loadConfig, parseApprovals, type Config } from './config.js';
 import { invoices } from './data/invoices.js';
 import { debtor, vendors } from './data/vendors.js';
 import {
@@ -19,12 +19,19 @@ import {
   WhenInferenceCompleted,
   answerText,
 } from './events.js';
-import { parseAudit, parseExtraction } from './parsing.js';
+import {
+  parseAudit,
+  parseExtraction,
+  parseVerification,
+  unsourcedFigures,
+} from './parsing.js';
 import {
   addDuplicateChecks,
   caseChecks,
   decide,
   findVendor,
+  needsVerification,
+  type Decision,
   type InvoiceCase,
 } from './checks.js';
 import { buildPain001, type Payment } from './sepa.js';
@@ -32,10 +39,13 @@ import { buildReport, DISCLAIMER } from './report.js';
 import {
   EXTRACTOR_INSTRUCTION,
   AUDITOR_INSTRUCTION,
+  VERIFIER_INSTRUCTION,
   EXTRACTION_SCHEMA,
   AUDIT_SCHEMA,
+  VERIFICATION_SCHEMA,
   extractorMessage,
   auditorMessage,
+  verifierMessage,
 } from './prompts.js';
 
 const OUT_DIR = 'out';
@@ -61,6 +71,10 @@ const config: Config = (() => {
     return fail((error as Error).message);
   }
 })();
+
+// Human approver: `npm start -- --approve INV-1004` releases payments above
+// the agent's limit. It cannot override failed checks or auditor concerns.
+const approved: ReadonlySet<string> = new Set(parseApprovals(process.argv.slice(2)));
 
 // Shared state: every agent's result lands in the case for its document.
 class AppState extends RuntimeState {
@@ -139,11 +153,21 @@ function run(agent: Agent, c: InvoiceCase, message: string, output: OutputFormat
 
 const EXTRACTION_OUTPUT: OutputFormat = { name: 'invoice_extraction', schema: EXTRACTION_SCHEMA };
 const AUDIT_OUTPUT: OutputFormat = { name: 'payment_audit', schema: AUDIT_SCHEMA };
+const VERIFY_OUTPUT: OutputFormat = { name: 'vendor_verification', schema: VERIFICATION_SCHEMA };
 
-// Per document: an Extractor, then an Auditor that checks the Extractor.
-// Each Auditor only reacts to its own Extractor, so agents can't loop.
+// An answer settles the pending loop only if it came from the agent that
+// loop belongs to (another handler may already have started the next one).
+function settle(c: InvoiceCase, producerId: string): void {
+  if (pendingLoops.get(c)?.agent.getId() === producerId) pendingLoops.delete(c);
+}
+
+// Per document: an Extractor, then an Auditor that checks the Extractor, then
+// (only when bank details look wrong) a Verifier that reacts to the Auditor.
+// Each agent only reacts to its own predecessor, so agents can't loop.
 const names = new Map<string, string>();
 const auditorCase = new Map<string, InvoiceCase>();
+const verifierCase = new Map<string, InvoiceCase>();
+const auditAnswered = new Set<InvoiceCase>();
 const extractors: { agent: Agent; c: InvoiceCase }[] = [];
 
 for (const c of state.cases) {
@@ -168,7 +192,7 @@ for (const c of state.cases) {
           apply({ event }) {
             if (audited) return;
             audited = true;
-            pendingLoops.delete(c);
+            settle(c, event.producerId);
 
             const answer = answerText(event.payload);
             const parsed = parseExtraction(answer);
@@ -193,12 +217,66 @@ for (const c of state.cases) {
     ],
   });
 
+  let verifying = false;
+  const verifier = createAgent({
+    name: `Verifier ${c.doc.id}`,
+    capabilities: ['inference'],
+    instruction: VERIFIER_INSTRUCTION,
+    tools: [],
+    handlers: [
+      {
+        specification: new WhenAnswerFrom(auditor.getId()),
+        processor: {
+          apply({ event }) {
+            const vendor = needsVerification(c, vendors);
+            if (verifying || !vendor) return;
+            verifying = true;
+
+            const audit = parseAudit(answerText(event.payload));
+            const findings = {
+              failedChecks: c.checks.filter((check) => !check.ok),
+              auditorIssues: audit.ok ? audit.value.issues : [],
+            };
+            const { name, iban, contactEmail, phone } = vendor;
+            run(
+              verifier,
+              c,
+              verifierMessage(c.doc.file, c.doc.text, { name, iban, contactEmail, phone }, findings),
+              VERIFY_OUTPUT
+            );
+          },
+        },
+      },
+    ],
+  });
+
   names.set(extractor.getId(), `Extractor ${c.doc.id}`);
   names.set(auditor.getId(), `Auditor ${c.doc.id}`);
+  names.set(verifier.getId(), `Verifier ${c.doc.id}`);
   auditorCase.set(auditor.getId(), c);
+  verifierCase.set(verifier.getId(), c);
   extractors.push({ agent: extractor, c });
   join(extractor);
   join(auditor);
+  join(verifier);
+}
+
+function recordVerification(c: InvoiceCase, answer: string): void {
+  const vendor = findVendor(c.extraction!.vendorName.value, vendors)!;
+  const parsed = parseVerification(answer);
+  if (!parsed.ok) {
+    c.verificationError = `verifier answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`;
+    return;
+  }
+  // Every figure in the draft must come from the document, the vendor master,
+  // or the extraction; otherwise the draft is withheld.
+  const allowed = [c.doc.text, JSON.stringify(vendor), JSON.stringify(c.extraction)].join('\n');
+  const unsourced = unsourcedFigures(`${parsed.value.subject}\n${parsed.value.body}`, allowed);
+  if (unsourced.length > 0) {
+    c.verificationError = `verification draft withheld: unsourced figures ${unsourced.join(', ')}`;
+    return;
+  }
+  c.verification = { ...parsed.value, to: vendor.contactEmail, phone: vendor.phone };
 }
 
 // Logs every answer and records the auditor verdicts.
@@ -212,16 +290,28 @@ const monitor = createHuman({
         apply({ event }) {
           console.log(`[${names.get(event.producerId) ?? event.producerId}] answered`);
 
+          const verified = verifierCase.get(event.producerId);
+          if (verified && !verified.done) {
+            settle(verified, event.producerId);
+            recordVerification(verified, answerText(event.payload));
+            verified.done = true;
+            return finishIfDone();
+          }
+
           const c = auditorCase.get(event.producerId);
-          if (!c || c.done) return;
-          pendingLoops.delete(c);
+          if (!c || c.done || auditAnswered.has(c)) return;
+          auditAnswered.add(c);
+          settle(c, event.producerId);
 
           const answer = answerText(event.payload);
           const parsed = parseAudit(answer);
           if (parsed.ok) c.audit = parsed.value;
           else c.errors.push(`auditor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
-          c.done = true;
-          finishIfDone();
+          // Wait for the Verifier if bank details need confirming.
+          if (!needsVerification(c, vendors)) {
+            c.done = true;
+            finishIfDone();
+          }
         },
       },
     },
@@ -253,8 +343,11 @@ function finish(exitCode: number): void {
 
   addDuplicateChecks(state.cases);
 
+  const decisions = new Map<string, Decision>(
+    state.cases.map((c) => [c.doc.id, decide(c, config.approvalLimitEur, approved)])
+  );
   const payments: Payment[] = state.cases
-    .filter((c) => decide(c, config.approvalLimitEur) === 'ready')
+    .filter((c) => ['ready', 'approved'].includes(decisions.get(c.doc.id)!))
     .map((c) => {
       const e = c.extraction!;
       return {
@@ -287,11 +380,19 @@ function finish(exitCode: number): void {
 
   const reportFile = `${OUT_DIR}/review.md`;
   const usage = `models: ${config.models.slice(0, modelIndex + 1).join(' → ')}; tokens: ${tokens.input} in / ${tokens.output} out`;
-  writeFileSync(reportFile, buildReport(state.cases, config.approvalLimitEur, draftFile, usage));
+  writeFileSync(
+    reportFile,
+    buildReport(state.cases, decisions, { approvalLimit: config.approvalLimitEur, draftFile, usage, vendors })
+  );
 
   console.log('');
   for (const c of state.cases) {
-    console.log(`${c.doc.id}: ${decide(c, config.approvalLimitEur)}`);
+    const verification = c.verification ? ` (verification request drafted to ${c.verification.to})` : '';
+    console.log(`${c.doc.id}: ${decisions.get(c.doc.id)}${verification}`);
+  }
+  const waiting = state.cases.filter((c) => decisions.get(c.doc.id) === 'needs_approval');
+  if (waiting.length) {
+    console.log(`\nTo approve as a human, re-run with: --approve ${waiting.map((c) => c.doc.id).join(',')}  (e.g. npm run dev -- --approve ${waiting[0]!.doc.id})`);
   }
   console.log(`\nReport: ${reportFile}`);
   console.log(`Usage: ${usage}`);
@@ -408,7 +509,9 @@ setTimeout(
 );
 
 console.log(`StockMind AI — invoice to SEPA payment draft (models: ${config.models.join(' → ')})`);
-console.log(`${invoices.length} documents, ${invoices.length * 2} agents, approval limit EUR ${config.approvalLimitEur}, max ${config.requestsPerMinute} model calls/min\n`);
+console.log(`${invoices.length} documents, ${invoices.length * 3} agents, approval limit EUR ${config.approvalLimitEur}, max ${config.requestsPerMinute} model calls/min`);
+if (approved.size) console.log(`Human approval given for: ${[...approved].join(', ')}`);
+console.log('');
 
 // All extractors start at once and run in parallel.
 for (const { agent, c } of extractors) {

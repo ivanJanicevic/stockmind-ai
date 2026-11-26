@@ -1,6 +1,11 @@
 import type { SourceDocument } from './data/invoices.js';
 import type { Vendor } from './data/vendors.js';
-import { unverifiedFields, type Audit, type Extraction } from './parsing.js';
+import {
+  unverifiedFields,
+  type Audit,
+  type Extraction,
+  type Verification,
+} from './parsing.js';
 
 export interface Check {
   name: string;
@@ -14,11 +19,13 @@ export interface InvoiceCase {
   extraction?: Extraction;
   checks: Check[];
   audit?: Audit;
+  verification?: Verification & { to: string; phone: string };
+  verificationError?: string;
   errors: string[]; // agent failures: unparseable answer, timeout
   done: boolean;
 }
 
-export type Decision = 'ready' | 'needs_approval' | 'blocked';
+export type Decision = 'ready' | 'approved' | 'needs_approval' | 'blocked';
 
 const compact = (s: string) => s.replace(/\s+/g, '').toUpperCase();
 
@@ -41,6 +48,11 @@ export function findVendor(name: string, vendors: Vendor[]): Vendor | undefined 
 
 const money = (n: number) => n.toFixed(2);
 
+// Sender domain of an email document ("From: name@domain"), if any.
+export function senderDomain(text: string): string | undefined {
+  return /^From:.*@([a-z0-9.-]+\.[a-z]{2,})/im.exec(text)?.[1]?.toLowerCase();
+}
+
 // Checks that need only this document and the vendor master.
 export function caseChecks(
   doc: SourceDocument,
@@ -50,8 +62,9 @@ export function caseChecks(
   const unverified = unverifiedFields(e, doc.text);
   const vendor = findVendor(e.vendorName.value, vendors);
   const lineSum = e.lineItems.reduce((sum, item) => sum + item.amount.value, 0);
+  const sender = senderDomain(doc.text);
 
-  return [
+  const checks: Check[] = [
     {
       name: 'sources',
       ok: unverified.length === 0,
@@ -90,6 +103,31 @@ export function caseChecks(
       detail: `total ${money(e.totalAmount.value)}`,
     },
   ];
+
+  // Emails only: a lookalike sender domain is a classic payment-fraud signal.
+  if (sender) {
+    checks.push({
+      name: 'sender_domain',
+      ok: vendor !== undefined && (sender === vendor.emailDomain || sender.endsWith(`.${vendor.emailDomain}`)),
+      detail: vendor
+        ? `sent from ${sender}, vendor master domain ${vendor.emailDomain}`
+        : `sent from ${sender}, no vendor master record to compare`,
+    });
+  }
+
+  return checks;
+}
+
+// Bank details look wrong or may be fraudulent: confirm with the vendor
+// through the contact in the vendor master, never the document's sender.
+// Returns the vendor to contact, or undefined if no verification is needed.
+const VERIFY_ON = new Set(['iban_checksum', 'bank_details_match', 'sender_domain']);
+
+export function needsVerification(c: InvoiceCase, vendors: Vendor[]): Vendor | undefined {
+  if (!c.extraction || !c.checks.some((check) => !check.ok && VERIFY_ON.has(check.name))) {
+    return undefined;
+  }
+  return findVendor(c.extraction.vendorName.value, vendors);
 }
 
 // Checks across the whole batch; run once all extractions are in.
@@ -111,10 +149,18 @@ export function addDuplicateChecks(cases: InvoiceCase[]): void {
   }
 }
 
-export function decide(c: InvoiceCase, approvalLimit: number): Decision {
+// Human approval (--approve) only releases payments above the agent limit;
+// it never overrides a failed check or an auditor concern.
+export function decide(
+  c: InvoiceCase,
+  approvalLimit: number,
+  approved: ReadonlySet<string> = new Set()
+): Decision {
   if (!c.extraction || !c.audit || c.errors.length > 0) return 'blocked';
   if (c.checks.some((check) => !check.ok)) return 'blocked';
   if (c.audit.verdict !== 'ok') return 'blocked';
-  if (c.extraction.totalAmount.value > approvalLimit) return 'needs_approval';
+  if (c.extraction.totalAmount.value > approvalLimit) {
+    return approved.has(c.doc.id) ? 'approved' : 'needs_approval';
+  }
   return 'ready';
 }

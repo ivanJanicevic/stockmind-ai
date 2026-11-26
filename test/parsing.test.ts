@@ -6,7 +6,9 @@ import {
   amountsIn,
   parseAudit,
   parseExtraction,
+  parseVerification,
   quoteInSource,
+  unsourcedFigures,
   unverifiedFields,
 } from '../src/parsing.js';
 import { extractions } from './fixtures.js';
@@ -66,4 +68,22 @@ test('parseAudit validates verdict and issues', () => {
   });
   assert.equal(parseAudit('{"verdict":"maybe","issues":[]}').ok, false);
   assert.equal(parseAudit('{"verdict":"review","issues":[{"field":"iban"}]}').ok, false);
+});
+
+test('parseVerification needs subject and body', () => {
+  assert.deepEqual(parseVerification('{"subject":"s","body":"b"}'), { ok: true, value: { subject: 's', body: 'b' } });
+  assert.equal(parseVerification('{"subject":"s"}').ok, false);
+});
+
+test('unsourcedFigures flags only figures missing from the sources', () => {
+  const allowed = `${doc1001.text}\n+49 89 0000 1001`;
+  const ok = 'Invoice AK-2026-1001 for EUR 1,428.00 (1.428,00), IBAN DE89 3704 0044 0532 0130 00, due 10.12.2026. Call +49 89 0000 1001 within 5 days.';
+  assert.deepEqual(unsourcedFigures(ok, allowed), []);
+  assert.deepEqual(unsourcedFigures('Please pay EUR 1.482,00 to DE12 3456 7890 1234 5678 90', allowed), ['1.482,00', 'DE12 3456 7890 1234 5678 90']);
+});
+
+test('unsourcedFigures does not excuse an amount by a matching quantity', () => {
+  const doc1003 = invoices.find((d) => d.id === 'INV-1003')!;
+  assert.deepEqual(unsourcedFigures('We will pay EUR 600,00.', doc1003.text), ['600,00']);
+  assert.deepEqual(unsourcedFigures('Total EUR 590.00 for 600 croissants.', doc1003.text), []);
 });

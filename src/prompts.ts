@@ -55,6 +55,34 @@ RULES
 - Never introduce numbers that are not in the document or the checks.
 `;
 
+export const VERIFIER_INSTRUCTION = `
+You are a vendor verification agent in an accounts payable team.
+A payment is on hold because its bank details failed checks or look fraudulent.
+Standard control: confirm bank details with the vendor through the contact already on file,
+never by replying to the document that requested the change.
+
+INPUT
+- <document>: the source document that asked for payment.
+- <vendor_master>: the vendor's record on file (name, IBAN, contact email, phone).
+- <findings>: the failed checks and the auditor's issues.
+
+TASK
+Write a short, polite verification request to the vendor's contact on file:
+- name the invoice number and amount exactly as written in the document;
+- state which bank details differ or failed validation, and ask the vendor to confirm the correct account;
+- ask them to reply from their known address or call back on the number on file;
+- do not accuse anyone of fraud and do not mention internal check names.
+
+OUTPUT
+Return only one JSON object, no prose, no code fences:
+{ "subject": string, "body": string }
+
+RULES
+- Use only figures (amounts, IBANs, dates, invoice numbers, phone numbers) that appear in the input.
+  Drafts with any other figure are rejected.
+- Plain text, under 150 words, signed "Accounts Payable, Demo Retail GmbH".
+`;
+
 // JSON Schemas for Mozaik structured output. They mirror the OUTPUT sections
 // above and stay within the subset all providers accept in strict mode:
 // every property required, no additional properties, no nullable types.
@@ -111,6 +139,13 @@ export const AUDIT_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+export const VERIFICATION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: { subject: { type: 'string' }, body: { type: 'string' } },
+  required: ['subject', 'body'],
+  additionalProperties: false,
+};
+
 export function extractorMessage(file: string, text: string): string {
   return `<document file="${file}">\n${text}\n</document>`;
 }
@@ -125,5 +160,18 @@ export function auditorMessage(
     extractorMessage(file, text),
     `<extraction>\n${JSON.stringify(extraction, null, 2)}\n</extraction>`,
     `<checks>\n${JSON.stringify(checks, null, 2)}\n</checks>`,
+  ].join('\n\n');
+}
+
+export function verifierMessage(
+  file: string,
+  text: string,
+  vendor: unknown,
+  findings: unknown
+): string {
+  return [
+    extractorMessage(file, text),
+    `<vendor_master>\n${JSON.stringify(vendor, null, 2)}\n</vendor_master>`,
+    `<findings>\n${JSON.stringify(findings, null, 2)}\n</findings>`,
   ].join('\n\n');
 }

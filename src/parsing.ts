@@ -32,6 +32,11 @@ export interface Audit {
   issues: AuditIssue[];
 }
 
+export interface Verification {
+  subject: string;
+  body: string;
+}
+
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
 // Models often wrap JSON in prose or code fences; take the outermost object.
@@ -182,4 +187,35 @@ export function unverifiedFields(e: Extraction, source: string): string[] {
   );
 
   return problems;
+}
+
+export function parseVerification(answer: string): Parsed<Verification> {
+  try {
+    const raw = extractJson(answer);
+    if (!isObject(raw) || !isString(raw.subject) || !isString(raw.body)) {
+      throw new Error('answer must be { subject, body } with non-empty strings');
+    }
+    return { ok: true, value: { subject: raw.subject, body: raw.body } };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+// Figures in free text (IBAN-like codes, amounts, numbers with 3+ digits) that
+// can't be found in the allowed sources. Used to stop an agent's draft from
+// introducing numbers that came from nowhere.
+export function unsourcedFigures(text: string, allowed: string): string[] {
+  const figure = /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,4})?\b|\d[\d.,]*\d|\d/g;
+  const isMoney = (token: string) => /[.,]\d{2}$/.test(token);
+  const allowedCompact = compact(allowed);
+  // Only amounts written with cents count as money, so "EUR 600,00" can't be
+  // excused by a quantity like "Croissants (600)".
+  const allowedMoney = (allowed.match(figure) ?? []).filter(isMoney).flatMap(amountsIn);
+
+  return (text.match(figure) ?? []).filter((token) => {
+    if ((token.match(/\d/g) ?? []).length < 3) return false; // "5 days", "2 boxes"
+    if (allowedCompact.includes(compact(token))) return false;
+    if (!isMoney(token)) return true;
+    return !amountsIn(token).every((a) => allowedMoney.some((b) => sameAmount(a, b)));
+  });
 }

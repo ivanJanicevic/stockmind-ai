@@ -8,6 +8,8 @@ import {
   caseChecks,
   decide,
   ibanChecksumValid,
+  needsVerification,
+  senderDomain,
   type InvoiceCase,
 } from '../src/checks.js';
 import { extractions } from './fixtures.js';
@@ -46,7 +48,7 @@ test('sample batch: each document gets the expected decision', () => {
   assert.deepEqual(failed(byId['INV-1001']!), []);
 
   assert.equal(decide(byId['INV-1002']!, LIMIT), 'blocked');
-  assert.deepEqual(failed(byId['INV-1002']!), ['bank_details_match']);
+  assert.deepEqual(failed(byId['INV-1002']!), ['bank_details_match', 'sender_domain']);
 
   assert.equal(decide(byId['INV-1003']!, LIMIT), 'blocked');
   assert.deepEqual(failed(byId['INV-1003']!), ['iban_checksum', 'bank_details_match']);
@@ -58,6 +60,33 @@ test('sample batch: each document gets the expected decision', () => {
   assert.deepEqual(failed(byId['INV-1005']!), ['not_duplicate']);
 
   assert.equal(decide(byId['INV-1006']!, LIMIT), 'ready');
+});
+
+test('senderDomain reads the From: line of emails only', () => {
+  assert.equal(senderDomain('From: accounts@delft-packaging-billing.com\nSubject: x'), 'delft-packaging-billing.com');
+  assert.equal(senderDomain('INVOICE\nIBAN: ...'), undefined);
+});
+
+test('sender_domain passes for the real vendor domain', () => {
+  const c = runBatch().find((x) => x.doc.id === 'INV-1005')!;
+  assert.equal(c.checks.find((x) => x.name === 'sender_domain')?.ok, true);
+});
+
+test('needsVerification only for bank-detail problems, returning the vendor to contact', () => {
+  const byId = Object.fromEntries(runBatch().map((c) => [c.doc.id, c]));
+  assert.equal(needsVerification(byId['INV-1002']!, vendors)?.id, 'V-DELFT');
+  assert.equal(needsVerification(byId['INV-1003']!, vendors)?.id, 'V-MARTIN');
+  assert.equal(needsVerification(byId['INV-1001']!, vendors), undefined);
+  assert.equal(needsVerification(byId['INV-1004']!, vendors), undefined);
+  assert.equal(needsVerification(byId['INV-1005']!, vendors), undefined); // duplicate only
+});
+
+test('human approval releases only above-limit payments, never blocked ones', () => {
+  const byId = Object.fromEntries(runBatch().map((c) => [c.doc.id, c]));
+  const approved = new Set(['INV-1004', 'INV-1002']);
+  assert.equal(decide(byId['INV-1004']!, LIMIT, approved), 'approved');
+  assert.equal(decide(byId['INV-1002']!, LIMIT, approved), 'blocked');
+  assert.equal(decide(byId['INV-1001']!, LIMIT, approved), 'ready');
 });
 
 test('auditor review or agent error blocks an otherwise clean case', () => {
