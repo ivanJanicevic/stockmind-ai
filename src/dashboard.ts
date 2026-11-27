@@ -318,8 +318,11 @@ function srcLine(ref,text){const hd=(REFS().headers||{})[ref.replace(/:[0-9]+$/,
 // A check about one invoice line also shows that line as printed on both documents.
 function checkCite(c,x){const pre=MODE==='live'?'/doc/':'doc/',l=c.lines.find(l=>x.name.endsWith(' '+l.code));
   return srcDot({t:'Check: '+x.name+(x.ok?' — passed':' — failed'),q:l&&l.quote,qf:'the invoice',q2:l&&l.noteQuote,s:x.sources,n:x.detail,href:pre+c.invoicePdf.replace('data/','')});}
-// An agent is working from its first start until it answers (retries included); a failed one is not.
-const isActive=(t)=>t.startedAt!=null&&t.answeredAt==null&&t.status!=='no answer';
+// An active agent is one with running status or one that started and has not
+// answered yet. Use both signals because live/replay snapshots may arrive
+// between a start timestamp and a status update.
+const isActive=(t)=>t.status==='running'&&t.answeredAt==null||
+  t.startedAt!=null&&t.answeredAt==null&&t.status!=='no answer'&&t.status!=='answered';
 // Agents that were started or are waiting for the rate limit. Idle ones never ran (e.g. a claims writer for a clean invoice).
 const TL=()=>S.timeline.filter(t=>t.status!=='idle');
 // Role totals: every registered agent, except claims writers, which only count when an invoice is held.
