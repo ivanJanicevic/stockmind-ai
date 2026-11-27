@@ -14,7 +14,7 @@ import { HOSTED_NETWORK, readInviteLink } from '@jigjoy/mozaik-network/invite-li
 import { NetworkClient } from '@jigjoy/mozaik-network/network-client';
 
 import { loadConfig, parseApprovals, type Config } from './config.js';
-import { DATA_DIR, FILES, loadDataset, loadPlanningParams } from './data/load.js';
+import { DATA_DIR, FILES, loadDataset, loadPlanningParams, readText } from './data/load.js';
 import { periodResult, priceChanges, round2, stockCheck, unitMargins, weeklyTrend } from './analytics.js';
 import {
   blockingFailures,
@@ -549,10 +549,62 @@ join(monitor);
 let finished = false;
 let final: { decisions: Map<string, Decision>; paymentTotal: number } | undefined;
 
+// Citations for the dashboard: the text of every "file:line" source in the
+// snapshot, and the article master (artikli.json), so hovering a figure shows
+// the exact row it comes from.
+const fileLines = new Map<string, string[]>();
+function sourceLine(source: string): string | null {
+  const m = /^([\w./-]+\.(?:csv|json|txt)):(\d+)$/.exec(source.trim());
+  if (!m) return null;
+  let lines = fileLines.get(m[1]!);
+  if (!lines) {
+    try {
+      lines = readText(m[1]!).replace(/\r/g, '').split('\n');
+    } catch {
+      lines = [];
+    }
+    fileLines.set(m[1]!, lines);
+  }
+  const text = lines[Number(m[2]) - 1];
+  return text === undefined ? null : text.trim().slice(0, 400);
+}
+function sourceTexts(value: unknown, out: Record<string, string> = {}): Record<string, string> {
+  if (Array.isArray(value)) for (const v of value) sourceTexts(v, out);
+  else if (value && typeof value === 'object')
+    for (const [k, v] of Object.entries(value)) {
+      if ((k === 'sources' || k === 'source') && (typeof v === 'string' || Array.isArray(v))) {
+        for (const s of [v].flat())
+          if (typeof s === 'string')
+            for (const part of s.split(' | ')) {
+              const text = sourceLine(part);
+              if (text !== null) out[part.trim()] = text;
+            }
+      } else sourceTexts(v, out);
+    }
+  return out;
+}
+// The header row of every CSV a cited line comes from, to label its columns.
+function csvHeaders(lines: Record<string, string>): Record<string, string> {
+  const files = new Set(Object.keys(lines).map((k) => k.replace(/:\d+$/, '')).filter((f) => f.endsWith('.csv')));
+  return Object.fromEntries([...files].map((f) => [f, sourceLine(`${f}:1`) ?? '']));
+}
+const articles = (() => {
+  try {
+    const text = readText(FILES.products);
+    const lines = text.split('\n');
+    const list = (JSON.parse(text) as { artikli: Record<string, unknown>[] }).artikli;
+    return Object.fromEntries(
+      list.map((a) => [String(a.sifra), { ...a, source: `${FILES.products}:${lines.findIndex((l) => new RegExp(`"sifra":\\s*${a.sifra},`).test(l)) + 1}` }]),
+    );
+  } catch {
+    return {};
+  }
+})();
+
 // What the live dashboard shows; a read-only view of the shared state.
 function snapshot(): unknown {
   const p = state.planning;
-  return {
+  const s = {
     finished,
     elapsedMs: elapsed(),
     model: currentModel(),
@@ -562,7 +614,8 @@ function snapshot(): unknown {
     limitRsd: config.approvalLimitRsd,
     agentsTotal: agents.size,
     charts: chartData,
-    timeline: [...state.timeline.values()].filter((t) => t.status !== 'idle'),
+    // Idle entries too, so the dashboard knows each role's total before it starts.
+    timeline: [...state.timeline.values()],
     cases: state.cases.map((c) => {
       const read = invoiceIn.has(c.id) && noteIn.has(c.id);
       const status = !read ? 'reading' : (final?.decisions.get(c.id) ?? decide(c, config.approvalLimitRsd, approved));
@@ -577,6 +630,9 @@ function snapshot(): unknown {
         issueDate: inv?.issueDate.value ?? null,
         dueDate: inv?.dueDate.value ?? null,
         amount: inv?.totalAmount.value ?? null,
+        quotes: inv
+          ? { amount: inv.totalAmount.quote, issueDate: inv.issueDate.quote, dueDate: inv.dueDate.quote, pib: inv.supplierPib.quote, account: inv.supplierAccount.quote }
+          : null,
         status,
         approvedBy: no ? (approvalNotes.get(no) ?? null) : null,
         invoicePdf: `data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`,
@@ -591,8 +647,10 @@ function snapshot(): unknown {
           unitPrice: l.unitPrice,
           vatRate: l.vatRate,
           lineTotal: l.lineTotal,
+          quote: l.quote,
+          noteQuote: c.note?.lines.find((n) => n.code === l.code)?.quote ?? null,
         })),
-        checks: c.checks.map(({ name, ok, blocking, detail, impactRsd }) => ({ name, ok, blocking, detail, impactRsd })),
+        checks: c.checks.map(({ name, ok, blocking, detail, impactRsd, sources }) => ({ name, ok, blocking, detail, impactRsd, sources })),
         errors: c.errors,
         claim: c.claim ?? null,
         claimError: c.claimError ?? null,
@@ -606,10 +664,12 @@ function snapshot(): unknown {
       agent: a.agent,
       done: a.done,
       error: a.error ?? null,
-      accepted: a.accepted,
+      accepted: a.accepted.map((f) => ({ ...f, row: a.rows.find((r) => r.id === f.id) ?? null })),
       rejected: a.rejected,
     })),
     review: state.review?.review ?? null,
+    // What each id the reviewer cites stands for, with its sources.
+    reviewItems: state.review ? Object.fromEntries([...reviewItems()].map(([id, item]) => [id, reviewItemRef(item)])) : null,
     reviewNote: state.reviewNote ?? null,
     planning: p
       ? {
@@ -624,6 +684,14 @@ function snapshot(): unknown {
         }
       : null,
   };
+  const lines = sourceTexts(s);
+  return { ...s, refs: { lines, headers: csvHeaders(lines), articles } };
+}
+
+function reviewItemRef(item: unknown): { label: string; sources: string[] } {
+  const i = item as { id: string; analyst?: string; finding?: { id: string; headline: string }; data?: { sources?: string[] }; supplier?: string; decision?: string };
+  if (i.finding) return { label: `${i.analyst} · ${i.finding.id}: ${i.finding.headline}`, sources: i.data?.sources ?? [] };
+  return { label: `Payment check · ${i.id.slice(3)} (${i.supplier}): ${i.decision}`, sources: [] };
 }
 
 const frames: { t: number; s: unknown }[] = [];
@@ -636,7 +704,8 @@ function recordFrame(force = false): void {
   const s = snapshot();
   const json = JSON.stringify(s);
   if (json === lastFrameJson) return;
-  frames.push({ t, s });
+  // A copy: the snapshot shares objects (timeline entries, arrays) that change later in the run.
+  frames.push({ t, s: JSON.parse(json) as unknown });
   lastFrameJson = json;
   lastFrameAt = t;
 }
@@ -650,7 +719,15 @@ function writeReplay(): void {
     copyFileSync(`${DATA_DIR}otpremnice/${c.noteFile.replace('.txt', '.pdf')}`, `${DEMO_DIR}/doc/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`);
   }
   writeFileSync(`${DEMO_DIR}/index.html`, pageHtml('replay'));
-  writeFileSync(`${DEMO_DIR}/replay.json`, JSON.stringify({ recordedAt: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC', model: config.models.slice(0, modelIndex + 1).join(' → '), frames }));
+  // Citations are the same in every frame: store them once.
+  const refs = { lines: {} as Record<string, string>, headers: {} as Record<string, string>, articles };
+  for (const f of frames) {
+    const s = f.s as { refs?: { lines: Record<string, string>; headers: Record<string, string> } };
+    Object.assign(refs.lines, s.refs?.lines);
+    Object.assign(refs.headers, s.refs?.headers);
+    delete s.refs;
+  }
+  writeFileSync(`${DEMO_DIR}/replay.json`, JSON.stringify({ recordedAt: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC', model: config.models.slice(0, modelIndex + 1).join(' → '), refs, frames }));
   console.log(`Replay: ${DEMO_DIR}/index.html + replay.json (${frames.length} frames) — commit docs/demo/ and enable GitHub Pages.`);
 }
 

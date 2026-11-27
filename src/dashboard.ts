@@ -153,9 +153,15 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 .roles{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .role{padding:16px 18px;border-radius:20px;background:var(--glass);border:1px solid var(--line);border-top:3px solid var(--c);position:relative}
 .role .av{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c);flex:none}.role .av svg{width:22px;height:22px}
-.role .hd{display:flex;align-items:center;gap:12px;margin-bottom:10px}.role .hd b{display:block;font-weight:600}.role .hd span{font-size:12px;color:var(--muted)}
+.role .hd{display:flex;align-items:center;gap:12px;margin-bottom:10px;padding-right:58px}.role .hd b{display:block;font-weight:600}.role .hd span{font-size:12px;color:var(--muted)}
 .role .job{font-size:13px;margin-bottom:10px}.role dl{margin:0;font-size:12px;display:grid;grid-template-columns:62px 1fr;gap:4px 8px}.role dt{color:var(--dim)}.role dd{margin:0;color:#cfd8d4}
-.pips{display:flex;gap:5px;flex-wrap:wrap;margin-top:12px}.pip{width:12px;height:12px;border-radius:4px;background:rgba(255,255,255,.08);border:1px solid var(--line2)}.pip.queued{background:repeating-linear-gradient(135deg,rgba(255,255,255,.3) 0 2px,transparent 2px 4px)}.pip.running{background:var(--c);animation:pulse 1s ease-in-out infinite alternate}.pip.answered{background:var(--c);border-color:transparent}.pip.no{background:var(--held);border-color:transparent}
+.rb{position:absolute;top:14px;right:14px;padding:3px 10px;border-radius:99px;border:1px solid var(--c);color:var(--c);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;background:color-mix(in srgb,var(--c) 8%,transparent)}
+.flow .st{--c:var(--line2);position:relative;transition:opacity .2s,border-color .2s,box-shadow .2s}.flow .stt{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:600;color:var(--dim)}
+.flow .st.s-active{border-color:var(--c);box-shadow:0 0 0 1px var(--c) inset,0 0 26px color-mix(in srgb,var(--c) 28%,transparent)}.flow .st.s-active .stt{color:var(--c)}.flow .st.s-active .stt::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c);animation:pulse 1s ease-in-out infinite alternate}
+.flow .st.s-queued{border-color:color-mix(in srgb,var(--c) 45%,transparent);background:repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 6px,transparent 6px 12px)}.flow .st.s-queued .stt{color:var(--muted)}
+.flow .st.s-wait{border-color:var(--wait);box-shadow:0 0 0 1px var(--wait) inset,0 0 26px rgba(245,196,81,.25)}.flow .st.s-wait .stt{color:var(--wait)}
+.flow .st.s-done{border-color:color-mix(in srgb,var(--c) 40%,transparent)}.flow .st.s-done .stt{color:var(--ok)}.flow .st.s-done .stt::before{content:"✓"}
+.flow .st.s-off{opacity:.42}
 .rico{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:7px;margin-right:8px;vertical-align:middle;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c)}.rico svg{width:12px;height:12px}
 .axis{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin:6px 0 0 214px}
 .find{padding:12px 0;border-top:1px solid var(--line)}.find:first-of-type{border-top:0}.find .h{font-weight:500}.find .x{color:var(--muted);font-size:13px}.find .a{font-size:13px;color:var(--mint);margin-top:2px}
@@ -173,6 +179,12 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 .policy{margin-top:16px;padding:14px 16px;border-radius:18px;border:1px solid var(--line);background:var(--glass)}
 .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}.mismatch td{background:rgba(242,118,107,.08)}
 .toast{position:fixed;bottom:24px;right:24px;z-index:30;display:none;max-width:440px;padding:14px 18px;border-radius:18px;background:var(--panel2);border:1px solid var(--line2);box-shadow:0 20px 60px rgba(0,0,0,.4)}.toast.on{display:block}
+.cite{border-bottom:1px dotted rgba(255,255,255,.35);cursor:help}.cite:hover{border-bottom-color:var(--mint);color:#fff}
+.src{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;font-size:10px;font-weight:700;font-style:normal;background:var(--panel2);color:var(--muted);border:1px solid var(--line2);cursor:help;margin-left:6px;vertical-align:1px}.src:hover{color:var(--mint);border-color:var(--mint)}
+#tip{position:fixed;z-index:40;display:none;width:min(480px,calc(100vw - 24px));max-height:70vh;overflow:auto;padding:14px 16px;border-radius:16px;background:rgba(16,21,22,.98);border:1px solid var(--line2);box-shadow:0 24px 70px rgba(0,0,0,.6);font-size:12px;color:var(--text)}
+#tip .tt{font-weight:600;font-size:13px}#tip .lbl{color:var(--dim);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin:12px 0 5px}
+#tip pre{white-space:pre-wrap;word-break:break-word;margin:3px 0 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line);font:11px/1.45 ui-monospace,Menlo,monospace;color:#dfe7e3}
+#tip .ref{font:11px ui-monospace,Menlo,monospace;color:var(--mint);margin-top:8px;word-break:break-all}#tip .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px}#tip .kv span{color:var(--muted)}#tip .note{color:var(--muted);margin-top:10px}
 footer{color:var(--dim);font-size:12px;margin-top:26px}
 @media(max-width:1100px){.grid,.row2,.two,.mini{grid-template-columns:1fr}.meta{grid-template-columns:1fr 1fr}.app{grid-template-columns:70px 1fr}}
 </style></head>
@@ -194,6 +206,7 @@ footer{color:var(--dim);font-size:12px;margin-top:26px}
 </main></div>
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
+<div id="tip"></div>
 <script>
 const TOKEN='__TOKEN__', MODE='__MODE__';
 let R=null,playT=0,last=Date.now(),speed=4,paused=false;const simApproved=new Set();
@@ -202,7 +215,7 @@ async function replayFrame(){
   const now=Date.now();if(!paused)playT+=(now-last)*speed;last=now;
   const end=R.frames[R.frames.length-1].t;if(playT>end)playT=end;
   let f=R.frames[0];for(const x of R.frames){if(x.t<=playT)f=x;else break;}
-  return JSON.parse(JSON.stringify(f.s));
+  const s=JSON.parse(JSON.stringify(f.s));s.refs=R.refs;return s;
 }
 // Approvals in the replay only change this page: same rule as the server.
 function applySim(s){
@@ -222,6 +235,47 @@ const svg=(k)=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 const ini=(s)=>String(s||'?').replace(/\\(.*?\\)/g,'').trim().split(/\\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
 const hue=(s)=>{let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))%360;return h;};
 
+// Citations: every figure with a dotted underline (or an "i") shows on hover
+// where it comes from — the printed document row, the code-computed row, the
+// data/ file lines behind it, or the article master.
+let CIT=[];
+const cite=(html,c)=>'<span class="cite" data-ci="'+(CIT.push(c)-1)+'">'+html+'</span>';
+const srcDot=(c)=>'<i class="src" data-ci="'+(CIT.push(c)-1)+'">i</i>';
+const REFS=()=>(S&&S.refs)||{lines:{},headers:{},articles:{}};
+const HIDE=new Set(['sources','source','id','limitations','missing','costMissing','products']);
+const flat=(o,p)=>Object.entries(o).flatMap(([k,v])=>v&&typeof v==='object'&&!Array.isArray(v)&&!HIDE.has(k)?flat(v,(p||'')+k+'.'):[[(p||'')+k,v]]);
+function kv(o){return '<div class="kv">'+flat(o).filter(([k,v])=>!HIDE.has(k)&&v!=null&&v!==''&&typeof v!=='object').slice(0,16).map(([k,v])=>'<span>'+esc(k)+'</span><b style="font-weight:500">'+esc(typeof v==='number'?fmtq(v):v)+'</b>').join('')+'</div>';}
+function tipHtml(c){
+  const L=REFS().lines,art=c.a!=null?REFS().articles[String(c.a)]:null;let h='<div class="tt">'+esc(c.t)+'</div>';
+  if(c.q)h+='<div class="lbl">Printed on '+esc(c.qf||'the document')+'</div><pre>'+esc(c.q)+'</pre>';
+  if(c.q2)h+='<div class="lbl">Printed on the delivery note</div><pre>'+esc(c.q2)+'</pre>';
+  if(art)h+='<div class="lbl">Article · '+esc(art.source)+'</div>'+kv(art);
+  if(c.row)h+='<div class="lbl">Computed by code · row '+esc(c.row.id||'')+'</div>'+kv(c.row);
+  const src=[...new Set((c.s||[]).flatMap(x=>String(x).split(' | ')))];
+  if(src.length)h+='<div class="lbl">Sources in data/</div>'+src.slice(0,8).map(x=>'<div class="ref">'+esc(x)+'</div>'+(L[x]?srcLine(x,L[x]):'')).join('')+(src.length>8?'<div class="note">+ '+(src.length-8)+' more in out/review.md</div>':'');
+  if(c.n)h+='<div class="note">'+esc(c.n)+'</div>';
+  if(c.href)h+='<div style="margin-top:10px"><a href="'+c.href+'" target="_blank">Open the original PDF ↗</a></div>';
+  return h;
+}
+// A cited CSV line is shown with its column names; other files as printed.
+function srcLine(ref,text){const hd=(REFS().headers||{})[ref.replace(/:[0-9]+$/,'')];if(!hd)return '<pre>'+esc(text)+'</pre>';
+  const h=hd.split(';'),v=text.split(';');return '<pre>'+h.map((k,i)=>'<span style="color:var(--dim)">'+esc(k)+'</span> '+esc(v[i]??'')).join('<br>')+'</pre>';}
+// A check about one invoice line also shows that line as printed on both documents.
+function checkCite(c,x){const pre=MODE==='live'?'/doc/':'doc/',l=c.lines.find(l=>x.name.endsWith(' '+l.code));
+  return srcDot({t:'Check: '+x.name+(x.ok?' — passed':' — failed'),q:l&&l.quote,qf:'the invoice',q2:l&&l.noteQuote,s:x.sources,n:x.detail,href:pre+c.invoicePdf.replace('data/','')});}
+// An agent is working from its first start until it answers (retries included); a failed one is not.
+const isActive=(t)=>t.startedAt!=null&&t.answeredAt==null&&t.status!=='no answer';
+// Agents that were started or are waiting for the rate limit. Idle ones never ran (e.g. a claims writer for a clean invoice).
+const TL=()=>S.timeline.filter(t=>t.status!=='idle');
+// Role totals: every registered agent, except claims writers, which only count when an invoice is held.
+const roleAgents=(keys)=>S.timeline.filter(t=>keys.includes(roleOf(t))&&!(roleOf(t)==='claims'&&t.status==='idle'));
+const working=()=>{const n=S.timeline.filter(isActive).length;return n+' agent'+(n===1?'':'s')+' working';};
+let tipT=0;
+function showTip(el){const c=CIT[+el.dataset.ci];if(!c)return;const t=$('tip');clearTimeout(tipT);t.innerHTML=tipHtml(c);t.style.display='block';
+  const r=el.getBoundingClientRect(),w=t.offsetWidth,hh=t.offsetHeight;let x=Math.min(Math.max(12,r.left),innerWidth-w-12),y=r.bottom+8;if(y+hh>innerHeight-12)y=Math.max(12,r.top-hh-8);t.style.left=x+'px';t.style.top=y+'px';}
+const hideTip=()=>{tipT=setTimeout(()=>{$('tip').style.display='none';},180);};
+document.addEventListener('mouseover',(e)=>{const el=e.target.closest&&e.target.closest('[data-ci]');if(el)showTip(el);else if(!e.target.closest||!e.target.closest('#tip'))hideTip();});
+$('tip').addEventListener('mouseenter',()=>clearTimeout(tipT));$('tip').addEventListener('mouseleave',hideTip);
 async function tick(){
   try{S=MODE==='live'?await (await fetch('/state',{cache:'no-store'})).json():applySim(await replayFrame());}
   catch{ if(MODE==='replay'){$('view').innerHTML='<div class="card"><div class="empty">No recording yet: run <code>npm run record</code> to create docs/demo/replay.json from a real run.</div></div>';$('st').innerHTML='<span class="dot"></span>no recording';}else{$('st').innerHTML='<span class="dot"></span>run ended — page is static';} return; }
@@ -229,9 +283,9 @@ async function tick(){
 }
 function go(v){view=v;render();}
 function render(){
+  CIT=[];
   const waiting=S.cases.filter(c=>c.status==='needs_approval');
-  const running=S.timeline.filter(t=>t.status==='running').length;
-  $('st').innerHTML='<span class="dot '+(S.finished?'':'live')+'"></span>'+(S.finished?'Run finished':running+' agents working · '+(S.elapsedMs/1000).toFixed(0)+' s');
+  $('st').innerHTML='<span class="dot '+(S.finished?'':'live')+'"></span>'+(S.finished?'Run finished':working()+' · '+(S.elapsedMs/1000).toFixed(0)+' s');
   $('nav').innerHTML=[['overview','Overview'],['payments','Payment run'],['agents','Agents'],['insights','Insights'],['inventory','Inventory']].map(([k,t])=>'<button title="'+t+'" class="'+(view===k?'on':'')+'" '+(k==='payments'&&waiting.length?'data-n="'+waiting.length+'"':'')+' onclick="go(\\''+k+'\\')">'+svg(k)+'</button>').join('');
   let b='';
   if(MODE==='replay'&&R){const end=R.frames[R.frames.length-1].t;b+='<div class="banner rp"><span style="font-size:20px">▶</span><div class="grow"><b style="color:var(--violet)">Replay of a real run</b><div class="muted" style="font-size:13px">Recorded '+esc(R.recordedAt)+' · '+esc(R.model)+' · '+R.frames.length+' state changes. Nothing here calls a model; approvals are simulated in your browser.</div></div><button class="btn" onclick="playT=0">⏮</button><button class="btn" onclick="paused=!paused">'+(paused?'▶':'⏸')+'</button>'+[1,4,16].map(x=>'<button class="btn '+(speed===x?'primary':'')+'" onclick="speed='+x+'">'+x+'×</button>').join('')+'<button class="btn" onclick="playT='+end+'">⏭</button><span class="muted" style="min-width:80px;text-align:right">'+(playT/1000).toFixed(0)+' / '+(end/1000).toFixed(0)+' s</span></div>';}
@@ -270,7 +324,7 @@ function sparkline(){
 }
 function invList(rows){return '<div class="list">'+(rows.length?rows.map(c=>{const h=hue(c.supplier);return '<div class="item" onclick="openReview(\\''+esc(c.invoiceNo)+'\\')"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.supplier||'Reading…')+'</b><span>'+esc(c.invoiceNo)+'</span></div><div class="a">'+rsd(c.amount)+'<span class="s-'+c.status+'">'+LABEL[c.status]+'</span></div></div>';}).join(''):'<div class="empty">no invoice matches</div>')+'</div>';}
 function overview(){
-  const running=S.timeline.filter(t=>t.status==='running').length;
+  const running=S.timeline.filter(isActive).length;
   const ready=S.cases.filter(c=>c.status==='ready'||c.status==='approved');
   const held=S.cases.filter(c=>c.status==='held');
   const w=S.charts.weeks.filter(x=>x.days===7),cur=w[w.length-1],prev=w[w.length-2];const d=cur&&prev?Math.round((cur.net-prev.net)/prev.net*1000)/10:null;
@@ -281,21 +335,21 @@ function overview(){
   '<div class="grid"><div class="col">'+
     '<div class="card"><div class="ch"><h3>Revenue flow</h3><button class="more" onclick="go(\\'insights\\')">Insights ›</button></div>'+revenueChart()+'</div>'+
     '<div class="row2"><div class="card"><div class="ch"><h3>Invoices by decision</h3><button class="more" onclick="go(\\'payments\\')">View all ›</button></div>'+donut()+'</div>'+
-    '<div class="stack"><div class="card stat"><div class="l">At stake on held invoices</div><div class="v">'+rsd(S.atStake)+'</div><div class="s">'+held.length+' held · claims drafted to suppliers</div><span class="delta '+(held.length?'down':'flat')+'">'+held.length+' held</span></div>'+
-    '<div class="card stat"><div class="l">Net revenue, last full week</div><div class="v">'+(cur?rsd(cur.net):'–')+'</div><div class="s">'+(cur?esc(cur.key.split(' ').slice(1).join(' ')):'')+'</div>'+(d!=null?'<span class="delta '+(d>=0?'up':'down')+'">'+(d>0?'+':'')+fmtq(d)+' %</span>':'')+'</div></div></div>'+
-    '<div class="mini"><div class="card stat"><div class="l">Expired stock</div><div class="v">'+(S.planning?rsd(expired):'…')+'</div><div class="s">'+(S.planning?S.planning.expired.length+' lots · at purchase cost':'after delivery notes are verified')+'</div></div>'+
+    '<div class="stack"><div class="card stat"><div class="l">At stake on held invoices'+srcDot({t:'Sum of the amount at stake on every failed blocking check',s:held.flatMap(c=>c.checks.filter(x=>!x.ok&&x.blocking).flatMap(x=>x.sources||[])),n:held.map(c=>c.invoiceNo+': '+c.checks.filter(x=>!x.ok&&x.blocking).map(x=>x.detail).join('; ')).join(' · ')})+'</div><div class="v">'+rsd(S.atStake)+'</div><div class="s">'+held.length+' held · claims drafted to suppliers</div><span class="delta '+(held.length?'down':'flat')+'">'+held.length+' held</span></div>'+
+    '<div class="card stat"><div class="l">Net revenue, last full week'+srcDot({t:'Net revenue excl. VAT, '+(cur?cur.key:''),s:S.charts.sources,n:'Sum of iznos ÷ (1 + VAT) over every POS row in the week, refunds included. Computed by code from the POS export.'})+'</div><div class="v">'+(cur?rsd(cur.net):'–')+'</div><div class="s">'+(cur?esc(cur.key.split(' ').slice(1).join(' ')):'')+'</div>'+(d!=null?'<span class="delta '+(d>=0?'up':'down')+'">'+(d>0?'+':'')+fmtq(d)+' %</span>':'')+'</div></div></div>'+
+    '<div class="mini"><div class="card stat"><div class="l">Expired stock'+(S.planning?srcDot({t:'Expired lots at purchase cost',s:S.planning.expired.flatMap(l=>l.sources||[]),n:'Lots and expiry dates come only from verified delivery notes. Details in Inventory.'}):'')+'</div><div class="v">'+(S.planning?rsd(expired):'…')+'</div><div class="s">'+(S.planning?S.planning.expired.length+' lots · at purchase cost':'after delivery notes are verified')+'</div></div>'+
     '<div class="card stat" style="cursor:pointer" onclick="go(\\'insights\\')"><div class="l">Findings</div><div class="v">'+found+'</div><div class="s">'+S.analyses.filter(a=>a.done).length+' / '+S.analyses.length+' analysts done · '+(S.review?'reviewer done':'reviewer pending')+'</div></div></div>'+
   '</div><div class="col">'+
     '<div class="card"><div class="ch"><h3>Payment draft</h3><button class="more" onclick="go(\\'payments\\')">View all ›</button></div><div class="stackback b2"></div><div class="stackback"></div><div class="bankcard"><div class="plus">'+(S.finished?'✓':'…')+'</div><div class="l">'+(S.finished?'Ready to pay':'Ready so far')+'</div><div class="v">'+rsd(total)+'</div><div class="acc">'+ready.length+' order'+(ready.length===1?'':'s')+' · šifra plaćanja 221<small>draft only — nothing is sent</small></div></div></div>'+
     '<div class="card"><div class="ch"><h3>Invoices</h3><button class="more" onclick="go(\\'payments\\')">View all ›</button></div>'+invList(filtered().slice(0,7))+'</div>'+
-    '<div class="mini"><div class="card" style="cursor:pointer" onclick="go(\\'agents\\')"><div class="l" style="font-weight:500">Agents</div><div style="font-size:26px;font-weight:600;margin:4px 0">'+S.timeline.filter(t=>t.answeredAt!=null).length+'<span class="muted" style="font-size:14px"> / '+S.timeline.length+'</span></div><div class="muted" style="font-size:12px">'+running+' working now · timeline ›</div></div>'+
+    '<div class="mini"><div class="card" style="cursor:pointer" onclick="go(\\'agents\\')"><div class="l" style="font-weight:500">Agents</div><div style="font-size:26px;font-weight:600;margin:4px 0">'+S.timeline.filter(t=>t.answeredAt!=null).length+'<span class="muted" style="font-size:14px"> / '+TL().length+'</span></div><div class="muted" style="font-size:12px">'+running+' working now · timeline ›</div></div>'+
     '<div class="card"><div class="l" style="font-weight:500">Daily sales</div>'+sparkline()+'</div></div>'+
   '</div></div>';
 }
 function payments(){
   return '<div class="head"><div><h1>Payment run</h1><div class="sub">Each invoice is read by an invoice clerk and its delivery note by a receiving clerk; code matches both against the agreed prices.</div></div></div>'+chipsRow()+
   '<div class="cards">'+filtered().map(c=>{const f=c.checks.filter(x=>!x.ok&&x.blocking),w=c.checks.filter(x=>!x.ok&&!x.blocking);
-    const r=[...c.errors.map(e=>'<li class="bad">'+esc(e)+'</li>'),...f.map(x=>'<li>'+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+'</li>'),...w.map(x=>'<li class="warn">⚠ '+esc(x.detail)+'</li>')];
+    const r=[...c.errors.map(e=>'<li class="bad">'+esc(e)+'</li>'),...f.map(x=>'<li>'+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+(x.sources&&x.sources.length?checkCite(c,x):'')+'</li>'),...w.map(x=>'<li class="warn">⚠ '+esc(x.detail)+'</li>')];
     if(c.status==='needs_approval')r.push('<li>All '+c.checks.length+' checks passed · above the agent limit</li>');if(c.status==='ready')r.push('<li class="ok">All '+c.checks.length+' checks passed</li>');if(c.approvedBy)r.push('<li class="ok">Approved — '+esc(c.approvedBy)+'</li>');if(c.claim)r.push('<li>✉ Claim drafted to '+esc(c.claim.to)+'</li>');
     const h=hue(c.supplier);
     return '<div class="card inv" onclick="openReview(\\''+esc(c.invoiceNo)+'\\')"><div class="item" style="padding:0;cursor:inherit"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.invoiceNo)+'</b><span>'+esc(c.supplier||'Reading…')+'</span></div><div class="a">'+rsd(c.amount)+'</div></div><div style="margin-top:12px"><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span></div><ul class="reasons">'+r.join('')+'</ul></div>';}).join('')+'</div>';
@@ -315,47 +369,68 @@ const ROLES=[
 const roleOf=(t)=>t.role!=='analyst'?t.role:t.agent==='Inventory Planner'?'planner':t.agent.startsWith('Stock')?'stock':t.agent.startsWith('Sales')?'sales':'margin';
 const colorOf=(k)=>{const r=ROLES.find(x=>x[0]===k);return 'var(--'+(r?r[2]:'muted')+')';};
 const rico=(k,c)=>'<span class="rico" style="--c:'+(c||colorOf(k))+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+RI[k]+'</svg></span>';
+// Live stage state from S.timeline (agents) and S.cases (code and human steps).
+function stage(keys,offText){
+  const m=roleAgents(keys),act=m.filter(isActive).length,q=m.filter(t=>t.startedAt==null&&t.status==='queued').length;
+  const done=m.filter(t=>t.answeredAt!=null).length,fail=m.filter(t=>t.status==='no answer').length,parts=[];
+  if(act)parts.push(act+' working');if(q)parts.push(q+' queued');if(m.length)parts.push(done+' / '+m.length+' done'+(fail?' · '+fail+' failed':''));
+  const st=act?'active':q?'queued':m.length&&done+fail===m.length?'done':'off';
+  return {st:st,text:st==='off'?offText:parts.join(' · ')};
+}
 function flowStrip(){
-  const st=(k,c,t,d,cls)=>'<div class="st '+(cls||'')+'"><b>'+rico(k,c)+t+'</b>'+d+'</div>',ar='<span class="ar">→</span>';
-  return '<div class="flow">'+st('docs','var(--muted)','Documents',S.cases.length+' invoices + '+S.cases.length+' delivery notes')+ar+st('invoice','','Clerks, in pairs','invoice clerk + receiving clerk read every pair in parallel','par')+ar+st('code','var(--text)','Three-way match','code, not an agent: invoice vs delivery vs agreed price','code')+ar+st('claims','','Claims writer','only for held invoices')+ar+st('reviewer','','Reviewer','priorities for the week')+ar+st('you','var(--wait)','You','approve clean invoices above '+rsd(S.limitRsd))+'</div>'+
-  '<div class="flow" style="margin-top:8px">'+st('code','var(--text)','Code computes rows','stock, demand, margins, costs from data/','code')+ar+st('stock','','3 analysts','stock, sales, margin and cost, all from t=0','par')+ar+st('planner','','Inventory planner','once every delivery note is verified')+ar+st('reviewer','','Reviewer','sees all of it together')+'</div>';
+  const n=S.cases.length,read=S.cases.filter(c=>c.status!=='reading').length,pairsBusy=stage(['invoice','note']).st;
+  const waiting=S.cases.filter(c=>c.status==='needs_approval').length,appr=S.cases.filter(c=>c.status==='approved').length,held=S.cases.filter(c=>c.status==='held').length;
+  const match=read===n?{st:'done',text:n+' / '+n+' pairs matched · '+held+' held'}:read?{st:'active',text:read+' / '+n+' pairs matched'}:{st:pairsBusy==='off'?'off':'queued',text:'waits for both clerks of a pair'};
+  const human=waiting?{st:'wait',text:waiting+' waiting for you'}:appr?{st:'done',text:appr+' approved by you'}:read===n?{st:'off',text:'nothing needs approval'}:{st:'off',text:'waits for the decisions'};
+  const allMatched=read===n,claims=stage(['claims'],allMatched?'not needed: nothing held':'starts when a pair is held');
+  const st=(k,c,t,d,cls,x)=>'<div class="st s-'+x.st+' '+(cls||'')+'" style="--c:'+c+'"><b>'+rico(k,c)+t+'</b>'+d+'<div class="stt">'+esc(x.text)+'</div></div>',ar='<span class="ar">→</span>';
+  return '<div class="flow">'+st('docs','var(--muted)','Documents',n+' invoices + '+n+' delivery notes','',{st:'done',text:'loaded from data/'})+ar+
+    st('invoice',colorOf('invoice'),'Clerks, in pairs','invoice clerk + receiving clerk read every pair in parallel','par',stage(['invoice','note'],'starting…'))+ar+
+    st('code','var(--text)','Three-way match','code, not an agent: invoice vs delivery vs agreed price','code',match)+ar+
+    st('claims',colorOf('claims'),'Claims writer','only for held invoices','',claims)+ar+
+    st('reviewer',colorOf('reviewer'),'Reviewer','priorities for the week','',stage(['reviewer'],'starts when every specialist is done'))+ar+
+    st('you','var(--wait)','You','approve clean invoices above '+rsd(S.limitRsd),'',human)+'</div>'+
+  '<div class="flow" style="margin-top:8px">'+st('code','var(--text)','Code computes rows','stock, demand, margins, costs from data/','code',{st:'done',text:'computed before t=0'})+ar+
+    st('stock',colorOf('stock'),'3 analysts','stock, sales, margin and cost, all from t=0','par',stage(['stock','sales','margin'],'starting…'))+ar+
+    st('planner',colorOf('planner'),'Inventory planner','once every delivery note is verified','',stage(['planner'],'waits for the last delivery note'))+ar+
+    st('reviewer',colorOf('reviewer'),'Reviewer','sees all of it together','',stage(['reviewer'],'starts when every specialist is done'))+'</div>';
 }
 function agents(){
   const end=Math.max(S.elapsedMs,1),pct=(x)=>(100*x/end).toFixed(2)+'%',order={analyst:0,invoice:1,note:1,claims:2,reviewer:3};
-  const rows=[...S.timeline].sort((a,b)=>(order[a.role]-order[b.role])||((a.startedAt??1e12)-(b.startedAt??1e12)));
+  const rows=TL().sort((a,b)=>(order[a.role]-order[b.role])||((a.startedAt??1e12)-(b.startedAt??1e12)));
   const peak=Math.max(0,...rows.map(t=>t.startedAt==null?0:rows.filter(u=>u.startedAt!=null&&u.startedAt<=t.startedAt&&(u.answeredAt??end)>t.startedAt).length));
-  const cards=ROLES.map(([k,name,c,when,job,reads,gives,guard])=>{const mine=S.timeline.filter(t=>roleOf(t)===k);if(!mine.length)return '';
-    const done=mine.filter(t=>t.status==='answered').length,run=mine.filter(t=>t.status==='running').length;
-    const pips=mine.map(t=>'<span class="pip '+(t.status==='no answer'?'no':esc(t.status))+'" title="'+esc(t.agent)+' · '+esc(t.status==='idle'&&k==='claims'?'not needed (yet)':t.status)+'"></span>').join('');
-    return '<div class="role" style="--c:var(--'+c+')"><div class="hd"><div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+RI[k]+'</svg></div><div><b>'+name+(mine.length>1?' <span class="muted" style="font-weight:400">×'+mine.length+'</span>':'')+'</b><span>'+when+'</span></div></div>'+
+  const cards=ROLES.map(([k,name,c,when,job,reads,gives,guard])=>{const mine=roleAgents([k]);if(!mine.length)return '';
+    const done=mine.filter(t=>t.answeredAt!=null).length,run=mine.filter(isActive).length;
+    return '<div class="role" style="--c:var(--'+c+')"><span class="rb" title="'+done+' answered of '+mine.length+(run?' · '+run+' working':'')+'">'+done+' / '+mine.length+'</span><div class="hd"><div class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+RI[k]+'</svg></div><div><b>'+name+(mine.length>1?' <span class="muted" style="font-weight:400">×'+mine.length+'</span>':'')+'</b><span>'+when+'</span></div></div>'+
       '<div class="job">'+job+'</div><dl><dt>Reads</dt><dd>'+reads+'</dd><dt>Gives</dt><dd>'+gives+'</dd><dt>Checked</dt><dd>'+guard+'</dd></dl>'+
-      '<div class="pips">'+pips+'</div><div class="dim" style="font-size:11px;margin-top:6px">'+done+' answered'+(run?' · <span style="color:var(--c)">'+run+' working</span>':'')+'</div></div>';}).join('');
+      '</div>';}).join('');
   const g=rows.map(t=>{const q=t.queuedAt??0,st=t.startedAt,an=t.answeredAt,k=roleOf(t);let b='';
     if(st==null)b=t.status==='idle'?'':'<div class="bar q" style="left:'+pct(q)+';width:'+pct(end-q)+'"></div>';else{if(st>q)b+='<div class="bar q" style="left:'+pct(q)+';width:'+pct(st-q)+'"></div>';b+='<div class="bar '+(an==null?'run':'')+'" style="left:'+pct(st)+';width:'+pct((an??end)-st)+';background:'+colorOf(k)+'"></div>';}
     const tip=esc(t.agent)+' · '+t.status+(st!=null?' · started '+(st/1000).toFixed(1)+' s':'')+(an!=null?' · answered '+(an/1000).toFixed(1)+' s':'');
     return '<div class="nm" title="'+tip+'">'+rico(k)+esc(t.agent)+'</div><div class="track" title="'+tip+'">'+b+'</div>';}).join('');
-  return '<div class="head"><div><h1>Agents</h1><div class="sub">'+ROLES.length+' roles running as '+S.timeline.length+' Mozaik agent loops on one shared state. Up to <b style="color:var(--mint)">'+peak+'</b> worked at the same time.</div></div></div>'+
-  '<div class="col"><div class="card"><div class="ch"><h3>How the desk works</h3><span class="muted" style="font-size:12px">dashed = code, not a model · tinted = runs in parallel</span></div>'+flowStrip()+'</div>'+
-  '<div class="card"><div class="ch"><h3>Who does what</h3><div class="legend"><span><i style="background:rgba(255,255,255,.12)"></i>idle</span><span><i style="background:repeating-linear-gradient(135deg,rgba(255,255,255,.4) 0 2px,transparent 2px 4px)"></i>queued</span><span><i style="background:var(--mint)"></i>working / answered</span><span><i style="background:var(--held)"></i>no answer</span></div></div><div class="roles">'+cards+'</div></div>'+
+  return '<div class="head"><div><h1>Agents</h1><div class="sub">'+ROLES.length+' roles running as '+TL().length+' Mozaik agent loops on one shared state. Up to <b style="color:var(--mint)">'+peak+'</b> worked at the same time.</div></div><span class="pill" style="margin-left:auto"><span class="dot '+(S.timeline.some(isActive)?'live':'')+'"></span>'+working()+'</span></div>'+
+  '<div class="col"><div class="card"><div class="ch"><h3>How the desk works</h3><span class="muted" style="font-size:12px">glowing = working now · striped = queued · ✓ = done · faded = not started or not needed · dashed = code, not a model</span></div>'+flowStrip()+'</div>'+
+  '<div class="card"><div class="ch"><h3>Who does what</h3><span class="muted" style="font-size:12px">answered / total, per role</span></div><div class="roles">'+cards+'</div></div>'+
   '<div class="card"><div class="ch"><h3>Timeline</h3><div class="legend">'+ROLES.filter((r,i,a)=>a.findIndex(x=>x[2]===r[2])===i).map(r=>'<span><i style="background:var(--'+r[2]+')"></i>'+(r[2]==='analyst'?'Analysts':r[1])+'</span>').join('')+'<span><i style="background:repeating-linear-gradient(135deg,rgba(255,255,255,.4) 0 2px,transparent 2px 4px)"></i>queued for the rate limit</span></div></div><div class="gantt">'+g+'</div><div class="axis">'+[0,.25,.5,.75,1].map(f=>'<span>'+(f*end/1000).toFixed(0)+' s</span>').join('')+'</div></div></div>';
 }
 function insights(){
-  const rv=S.review?'<div class="card"><div class="ch"><h3>Reviewer — priorities this week</h3><span class="badge b-ready">checks the specialists against each other</span></div><p style="margin-top:0">'+esc(S.review.summary)+'</p>'+S.review.actions.map((a,i)=>'<div class="find"><div class="h"><span class="sev low">'+(i+1)+'</span>'+esc(a.action)+'</div><div class="x">'+esc(a.why)+' <span class="dim">('+a.itemIds.map(esc).join(', ')+')</span></div></div>').join('')+'</div>':'<div class="card"><div class="ch"><h3>Reviewer</h3></div><div class="empty">'+esc(S.reviewNote??'starts when every specialist has finished…')+'</div></div>';
+  const rv=S.review?'<div class="card"><div class="ch"><h3>Reviewer — priorities this week</h3><span class="badge b-ready">checks the specialists against each other</span></div><p style="margin-top:0">'+esc(S.review.summary)+'</p>'+S.review.actions.map((a,i)=>'<div class="find"><div class="h"><span class="sev low">'+(i+1)+'</span>'+esc(a.action)+'</div><div class="x">'+esc(a.why)+' <span class="dim">('+a.itemIds.map(id=>{const it=(S.reviewItems||{})[id];return it?cite(esc(id),{t:id+' — '+it.label,s:it.sources,n:'The reviewer may only use figures from the items it cites; checked by code.'}):esc(id);}).join(', ')+')</span></div></div>').join('')+'</div>':'<div class="card"><div class="ch"><h3>Reviewer</h3></div><div class="empty">'+esc(S.reviewNote??'starts when every specialist has finished…')+'</div></div>';
   return '<div class="head"><div><h1>Insights</h1><div class="sub">Analysts interpret code-computed rows; any figure not in the cited row is rejected.</div></div></div><div class="col">'+rv+'<div class="cards">'+S.analyses.map(a=>'<div class="card"><div class="ch"><h3>'+esc(a.agent)+'</h3><span class="muted" style="font-size:12px">'+(a.done?(a.error?'<span class="bad">failed</span>':a.accepted.length+' accepted · '+a.rejected.length+' rejected'):'working…')+'</span></div><div class="dim" style="font-size:12px;margin:-8px 0 6px">'+esc(a.title)+'</div>'+
-    (a.accepted.length?a.accepted.map(f=>'<div class="find"><div class="h"><span class="sev '+f.severity+'">'+f.severity+'</span>'+esc(f.headline)+'</div><div class="x">'+esc(f.explanation)+'</div><div class="a">→ '+esc(f.action)+' <span class="dim">('+esc(f.id)+')</span></div></div>').join(''):'<div class="empty">'+(a.done?'no findings accepted':'waiting for the agent…')+'</div>')+
+    (a.accepted.length?a.accepted.map(f=>'<div class="find"><div class="h"><span class="sev '+f.severity+'">'+f.severity+'</span>'+esc(f.headline)+srcDot({t:a.agent+' cites row '+f.id,row:f.row,s:f.row&&f.row.sources,a:f.row&&f.row.code!=null?f.row.code:null,n:'Every number in this finding must appear in this row: checked by code before it is shown.'})+'</div><div class="x">'+esc(f.explanation)+'</div><div class="a">→ '+esc(f.action)+' <span class="dim">('+cite(esc(f.id),{t:a.agent+' cites row '+f.id,row:f.row,s:f.row&&f.row.sources,a:f.row&&f.row.code!=null?f.row.code:null,n:'Every number in this finding must appear in this row: checked by code before it is shown.'})+')</span></div></div>').join(''):'<div class="empty">'+(a.done?'no findings accepted':'waiting for the agent…')+'</div>')+
     (a.rejected.length?'<div class="dim" style="font-size:12px;margin-top:8px">🚫 '+a.rejected.map(r=>esc(r.reason)).join(' · ')+'</div>':'')+'</div>').join('')+'</div></div>';
 }
 function inventory(){
   const P=S.planning;const head='<div class="head"><div><h1>Inventory</h1><div class="sub">Lots from verified delivery notes · stock is a book estimate (deliveries − recipe use), not a count.</div></div></div>';
   if(!P)return head+'<div class="card"><div class="empty">Starts when every delivery note has been read and verified…</div></div>';
+  const R_=(x,r,t)=>cite(x,{t:t||(r.item||r.name)+' · '+r.id,row:r,s:r.sources,a:r.code!=null?r.code:null}),AR=(name,code)=>code!=null&&REFS().articles[String(code)]?cite(esc(name),{t:name,a:code}):esc(name);
   const kind=(k)=>'<span class="kind '+({fact:'k-fact',forecast:'k-forecast',recommendation:'k-rec'})[k]+'">'+k.toUpperCase()+'</span>';
-  const exp='<table><tr><th>Item</th><th>Lot</th><th>Expiry</th><th class="n">Left</th><th class="n">At cost</th></tr>'+P.expired.map(l=>'<tr><td>'+esc(l.item)+'</td><td class="muted">'+esc(l.noteNo)+'</td><td>'+esc(l.expiryDate)+(l.status==='expired_on_arrival'?' <span class="bad">· on arrival</span>':'')+'</td><td class="n">'+fmtq(l.remainingAsOf)+' '+l.unit+'</td><td class="n">'+rsd(l.costAtRisk)+'</td></tr>').join('')+'</table>';
-  const risk=P.atRisk.length?'<table><tr><th>Item</th><th>Expires</th><th class="n">Left now</th><th class="n">Forecast left</th></tr>'+P.atRisk.map(l=>'<tr><td>'+esc(l.item)+'</td><td>'+esc(l.expiryDate)+' <span class="dim">('+l.daysToExpiry+' d)</span></td><td class="n">'+fmtq(l.remainingAsOf)+' '+l.unit+'</td><td class="n warn">'+fmtq(l.projectedLeftover)+' '+l.unit+'</td></tr>').join('')+'</table>':'<div class="empty">no lot is forecast to expire with stock left</div>';
-  const promo=P.promotions.length?P.promotions.map(p=>'<div class="find"><div class="h">'+esc(p.action)+'</div><div class="x">'+fmtq(p.unitsAtRisk)+' '+p.unit+' forecast unsold ('+rsd(p.costAtRisk)+' at cost) · needs '+fmtq(p.requiredDailySales)+'/day vs '+fmtq(p.currentDailySales)+' now'+(p.maxDiscountPct!=null?' · discount ceiling '+fmtq(p.maxDiscountPct)+' %':'')+'</div><div class="dim" style="font-size:12px">'+esc(p.limitations[0])+'</div></div>').join(''):'<div class="empty">none</div>';
+  const exp='<table><tr><th>Item</th><th>Lot</th><th>Expiry</th><th class="n">Left</th><th class="n">At cost</th></tr>'+P.expired.map(l=>'<tr><td>'+R_(esc(l.item),l)+'</td><td class="muted">'+esc(l.noteNo)+'</td><td>'+esc(l.expiryDate)+(l.status==='expired_on_arrival'?' <span class="bad">· on arrival</span>':'')+'</td><td class="n">'+R_(fmtq(l.remainingAsOf)+' '+l.unit,l,'Book estimate: delivered − recipe use, earliest expiry first')+'</td><td class="n">'+R_(rsd(l.costAtRisk),l,'At purchase cost')+'</td></tr>').join('')+'</table>';
+  const risk=P.atRisk.length?'<table><tr><th>Item</th><th>Expires</th><th class="n">Left now</th><th class="n">Forecast left</th></tr>'+P.atRisk.map(l=>'<tr><td>'+R_(esc(l.item),l)+'</td><td>'+esc(l.expiryDate)+' <span class="dim">('+l.daysToExpiry+' d)</span></td><td class="n">'+fmtq(l.remainingAsOf)+' '+l.unit+'</td><td class="n warn">'+R_(fmtq(l.projectedLeftover)+' '+l.unit,l,'Forecast from the last 14 days of demand')+'</td></tr>').join('')+'</table>':'<div class="empty">no lot is forecast to expire with stock left</div>';
+  const promo=P.promotions.length?P.promotions.map(p=>'<div class="find"><div class="h">'+esc(p.action)+srcDot({t:p.item+' · '+p.id,row:p,s:p.sources})+'</div><div class="x">'+fmtq(p.unitsAtRisk)+' '+p.unit+' forecast unsold ('+rsd(p.costAtRisk)+' at cost) · needs '+fmtq(p.requiredDailySales)+'/day vs '+fmtq(p.currentDailySales)+' now'+(p.maxDiscountPct!=null?' · discount ceiling '+fmtq(p.maxDiscountPct)+' %':'')+'</div><div class="dim" style="font-size:12px">'+esc(p.limitations[0])+'</div></div>').join(''):'<div class="empty">none</div>';
   const fl={stockout_risk:'<span class="badge b-held">stock-out risk</span>',overstock:'<span class="badge b-needs_approval">overstock</span>',no_demand:'<span class="badge b-reading">no demand</span>',insufficient_data:'<span class="badge b-reading">data missing</span>'};
-  const repl='<table><tr><th>Item</th><th>Status</th><th class="n">Book stock</th><th class="n">Days of cover</th><th>Proposal</th><th>Conf.</th></tr>'+P.replenishment.map(r=>'<tr><td>'+esc(r.item)+'</td><td>'+(fl[r.flag]||esc(r.flag))+'</td><td class="n">'+fmtq(r.bookStock)+' '+r.unit+'</td><td class="n">'+fmtq(r.daysOfCover)+'</td><td>'+(r.orderQuantity?'<b>order '+r.orderQuantity+' '+esc(r.purchaseUnit)+'</b>':r.flag==='overstock'?'pause reordering':'–')+'</td><td class="dim">'+r.confidence+'</td></tr>').join('')+'</table>';
-  const top='<table><tr><th>#</th><th>Product</th><th class="n">Total gross profit</th><th class="n">Per unit</th><th class="n">Margin</th></tr>'+P.topProfit.map(x=>'<tr><td>'+x.rank+'</td><td>'+esc(x.name)+'</td><td class="n"><b>'+rsd(x.grossProfit)+'</b></td><td class="n">'+rsd(x.avgProfitPerUnit)+'</td><td class="n">'+fmtq(x.marginPct)+' %</td></tr>').join('')+'</table>';
-  const mv=P.moving.map(m=>'<div class="find"><div class="h">'+(m.flag==='rising'?'📈':'📉')+' '+esc(m.name)+'</div><div class="x">'+m.previous+' → '+m.latest+' units ('+(m.changePct>0?'+':'')+fmtq(m.changePct)+' %)</div></div>').join('')||'<div class="empty">no product moved enough to flag</div>';
+  const repl='<table><tr><th>Item</th><th>Status</th><th class="n">Book stock</th><th class="n">Days of cover</th><th>Proposal</th><th>Conf.</th></tr>'+P.replenishment.map(r=>'<tr><td>'+R_(esc(r.item),r)+'</td><td>'+(fl[r.flag]||esc(r.flag))+'</td><td class="n">'+R_(fmtq(r.bookStock)+' '+r.unit,r,'Book stock: deliveries − recipe use (not a count)')+'</td><td class="n">'+R_(fmtq(r.daysOfCover),r,'Days of cover')+'</td><td>'+(r.orderQuantity?'<b>order '+r.orderQuantity+' '+esc(r.purchaseUnit)+'</b>':r.flag==='overstock'?'pause reordering':'–')+'</td><td class="dim">'+r.confidence+'</td></tr>').join('')+'</table>';
+  const top='<table><tr><th>#</th><th>Product</th><th class="n">Total gross profit</th><th class="n">Per unit</th><th class="n">Margin</th></tr>'+P.topProfit.map(x=>'<tr><td>'+x.rank+'</td><td>'+AR(x.name,x.code)+'</td><td class="n"><b>'+R_(rsd(x.grossProfit),x,'Total gross profit = net revenue − cost of goods')+'</b></td><td class="n">'+R_(rsd(x.avgProfitPerUnit),x,'Gross profit ÷ units')+'</td><td class="n">'+R_(fmtq(x.marginPct)+' %',x,'Margin = gross profit ÷ net revenue')+'</td></tr>').join('')+'</table>';
+  const mv=P.moving.map(m=>'<div class="find"><div class="h">'+(m.flag==='rising'?'📈':'📉')+' '+AR(m.name,m.code)+'</div><div class="x">'+R_(m.previous+' → '+m.latest+' units ('+(m.changePct>0?'+':'')+fmtq(m.changePct)+' %)',m,m.basis)+'</div></div>').join('')||'<div class="empty">no product moved enough to flag</div>';
   return head+'<div class="col"><div class="two"><div class="card"><div class="ch"><h3>'+kind('fact')+'Expired stock by lot</h3></div>'+exp+'</div><div class="card"><div class="ch"><h3>'+kind('forecast')+'At risk of expiring unsold</h3></div>'+risk+'</div></div>'+
     '<div class="card"><div class="ch"><h3>'+kind('recommendation')+'Promotion candidates</h3><span class="muted" style="font-size:12px">no promotion history — no uplift is estimated</span></div>'+promo+'</div>'+
     '<div class="card"><div class="ch"><h3>'+kind('recommendation')+'Replenishment</h3>'+(P.syntheticParams?'<span class="warn" style="font-size:12px">⚠ lead times are synthetic (data/planiranje.json)</span>':'')+'</div>'+repl+'</div>'+
@@ -368,16 +443,19 @@ $('modal').addEventListener('click',(e)=>{if(e.target.id==='modal')closeReview()
 addEventListener('keydown',(e)=>{if(e.key==='Escape')closeReview();});
 function renderReview(){
   const c=S.cases.find(x=>x.invoiceNo===openInv);if(!c)return;const can=c.status==='needs_approval',fails=c.checks.filter(x=>!x.ok);
-  const lines=c.lines.map(l=>{const bad=l.delivered!=null&&l.delivered!==l.quantity;return '<tr class="'+(bad?'mismatch':'')+'"><td class="dim">'+esc(l.code)+'</td><td>'+esc(l.name)+'</td><td class="n">'+fmtq(l.quantity)+' '+esc(l.unit)+'</td><td class="n '+(bad?'bad':'')+'">'+(l.delivered==null?'<span class="bad">not delivered</span>':fmtq(l.delivered))+'</td><td class="n">'+fmt(l.unitPrice)+'</td><td class="n">'+l.vatRate+' %</td><td class="n">'+fmt(l.lineTotal)+'</td><td>'+(l.expiry?esc(l.expiry):'<span class="dim">–</span>')+'</td></tr>';}).join('');
-  const checks=[...c.errors.map(e=>'<div class="check"><span class="ic bad">✗</span><span>'+esc(e)+'</span></div>'),...c.checks.map(x=>'<div class="check"><span class="ic '+(x.ok?'ok':x.blocking?'bad':'warn')+'">'+(x.ok?'✓':x.blocking?'✗':'⚠')+'</span><span><b>'+esc(x.name)+'</b> — '+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+'</span></div>')].join('');
+  const pre=MODE==='live'?'/doc/':'doc/',ipdf=pre+c.invoicePdf.replace('data/',''),npdf=pre+c.notePdf.replace('data/',''),h=hue(c.supplier);
+  const qi=(l)=>({t:'Invoice line '+l.code+' as the invoice clerk read it',q:l.quote,qf:'the invoice',href:ipdf,n:'Code checked that every value is in this printed row before it was used.'});
+  const qn=(l)=>({t:'Delivery note line '+l.code+' as the receiving clerk read it',q:l.noteQuote,qf:'the delivery note',href:npdf,n:'Read by a different agent from a different document; code compares the two.'});
+  const lines=c.lines.map(l=>{const bad=l.delivered!=null&&l.delivered!==l.quantity,I=(x)=>l.quote?cite(x,qi(l)):x,N=(x)=>l.noteQuote?cite(x,qn(l)):x;return '<tr class="'+(bad?'mismatch':'')+'"><td class="dim">'+esc(l.code)+'</td><td>'+esc(l.name)+'</td><td class="n">'+I(fmtq(l.quantity)+' '+esc(l.unit))+'</td><td class="n '+(bad?'bad':'')+'">'+(l.delivered==null?'<span class="bad">not delivered</span>':N(fmtq(l.delivered)))+'</td><td class="n">'+I(fmt(l.unitPrice))+'</td><td class="n">'+I(l.vatRate+' %')+'</td><td class="n">'+I(fmt(l.lineTotal))+'</td><td>'+(l.expiry?N(esc(l.expiry)):'<span class="dim">–</span>')+'</td></tr>';}).join('');
+  const chk=(x)=>x.sources&&x.sources.length?checkCite(c,x):'';
+  const checks=[...c.errors.map(e=>'<div class="check"><span class="ic bad">✗</span><span>'+esc(e)+'</span></div>'),...c.checks.map(x=>'<div class="check"><span class="ic '+(x.ok?'ok':x.blocking?'bad':'warn')+'">'+(x.ok?'✓':x.blocking?'✗':'⚠')+'</span><span><b>'+esc(x.name)+'</b> — '+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+chk(x)+'</span></div>')].join('');
   const policy=can?'<div class="policy"><b class="warn">Why it waits for you</b><div class="muted">Every check passed, but '+rsd(c.amount)+' is above the agent limit of '+rsd(S.limitRsd)+'. Approving adds it to the payment draft — a file; nothing is paid or sent.</div></div>'
     :c.status==='held'?'<div class="policy"><b class="bad">Held — can\\'t be approved</b><div class="muted">Resolve the problems above with the supplier first (a claim is drafted below when the documents show a discrepancy). Approval never overrides a failed check.</div></div>'
     :c.status==='approved'?'<div class="policy"><b class="ok">Approved</b><div class="muted">'+esc(c.approvedBy)+' · it is in the payment draft.</div></div>':c.status==='ready'?'<div class="policy"><b class="ok">Ready</b><div class="muted">Within the agent limit — no approval needed. It is in the payment draft.</div></div>':'<div class="policy muted">The clerks are still reading this invoice and its delivery note…</div>';
   const claim=c.claim?'<div class="policy"><b>✉ Claim draft (not sent) — to '+esc(c.claim.to)+'</b><div class="muted" style="margin:6px 0">'+esc(c.claim.subject)+'</div><div style="white-space:pre-wrap;font-size:13px">'+esc(c.claim.body)+'</div></div>':c.claimError?'<div class="policy dim">Claim writer: '+esc(c.claimError)+'</div>':'';
-  const pre=MODE==='live'?'/doc/':'doc/',h=hue(c.supplier);
   $('sheet').innerHTML='<div class="item" style="padding:0;cursor:default"><div class="ico" style="width:48px;height:48px;background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><h2>'+esc(c.invoiceNo)+'</h2><span>'+esc(c.supplier)+'</span></div><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span><button class="btn" style="margin-left:8px" onclick="closeReview()">✕</button></div>'+
-    '<div class="meta"><div><span>Total to pay</span><b>'+rsd(c.amount)+'</b></div><div><span>Issued → due</span>'+esc(c.issueDate)+' → '+esc(c.dueDate)+'</div><div><span>Supplier PIB</span>'+esc(c.pib)+'</div><div><span>Account</span>'+esc(c.account)+'</div></div>'+
-    '<div class="muted" style="font-size:13px;margin-bottom:8px">📄 <a href="'+pre+c.invoicePdf.replace('data/','')+'" target="_blank">Invoice PDF</a> · <a href="'+pre+c.notePdf.replace('data/','')+'" target="_blank">Delivery note PDF</a> · '+c.checks.filter(x=>x.ok).length+' checks passed, '+fails.length+' failed</div>'+
+    (()=>{const qq=c.quotes||{},H=(x,q,t)=>q?cite(x,{t:t,q:q,qf:'the invoice',href:ipdf}):x;return '<div class="meta"><div><span>Total to pay</span><b>'+H(rsd(c.amount),qq.amount,'Total to pay (Za uplatu)')+'</b></div><div><span>Issued → due</span>'+H(esc(c.issueDate),qq.issueDate,'Issue date')+' → '+H(esc(c.dueDate),qq.dueDate,'Due date')+'</div><div><span>Supplier PIB</span>'+H(esc(c.pib),qq.pib,'Supplier PIB')+'</div><div><span>Account</span>'+H(esc(c.account),qq.account,'Supplier account')+'</div></div>';})()+
+    '<div class="muted" style="font-size:13px;margin-bottom:8px">📄 <a href="'+ipdf+'" target="_blank">Invoice PDF</a> · <a href="'+npdf+'" target="_blank">Delivery note PDF</a> · hover a dotted figure to see the printed row · '+c.checks.filter(x=>x.ok).length+' checks passed, '+fails.length+' failed</div>'+
     '<table><tr><th>Code</th><th>Item</th><th class="n">Invoiced</th><th class="n">Delivered</th><th class="n">Price</th><th class="n">VAT</th><th class="n">Total</th><th>Expiry</th></tr>'+lines+'</table>'+
     '<div style="margin-top:16px"><b>Checks</b>'+checks+'</div>'+policy+claim+
     '<div class="actions"><button class="btn" onclick="closeReview()">Close</button>'+(can?'<button class="btn go" id="appr" onclick="approve(\\''+esc(c.invoiceNo)+'\\')">Approve for payment</button>':'')+'</div>';
