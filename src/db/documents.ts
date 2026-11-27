@@ -16,6 +16,7 @@ export interface DocumentRow {
   povezani_dokument_id: number | null;
   izvorni_fajl: string | null;
   potvrdio: string | null;
+  veza_broj: string | null;
 }
 
 export interface ItemRow {
@@ -39,6 +40,42 @@ export function findDocument(db: DatabaseSync, vrsta: DocumentType, broj: string
     .get(vrsta, broj) as unknown as DocumentRow | undefined;
 }
 
+/** The document read from a given PDF, e.g. 'otpremnice/otpremnica-05-kafa.pdf'. */
+export function findDocumentByFile(db: DatabaseSync, vrsta: DocumentType, file: string): DocumentRow | undefined {
+  return db
+    .prepare('SELECT * FROM prometni_dokument WHERE vrsta = ? AND izvorni_fajl = ?')
+    .get(vrsta, file) as unknown as DocumentRow | undefined;
+}
+
+/** A stored delivery note or invoice, back in the shape the Document agent saved it in. */
+export function draftFromDatabase(db: DatabaseSync, document: DocumentRow): DocumentDraft {
+  return {
+    file: document.izvorni_fajl ?? '',
+    kind: document.vrsta === 'ULAZNA_FAKTURA' ? 'invoice' : 'delivery_note',
+    number: document.broj,
+    date: document.datum_dokumenta,
+    supplier: document.dobavljac ?? '',
+    relatedDocument: document.veza_broj,
+    items: documentItems(db, document.id).map((item) => ({
+      line: Number(item.izvor.split(':').at(-1)),
+      supplierCode: item.sifra_dobavljaca,
+      name: item.naziv,
+      unit: item.jm,
+      quantity: item.kolicina,
+      unitPrice: item.cena,
+      expiryDate: item.rok_trajanja,
+    })),
+  };
+}
+
+export function documentById(db: DatabaseSync, id: number): DocumentRow | undefined {
+  return db.prepare('SELECT * FROM prometni_dokument WHERE id = ?').get(id) as unknown as DocumentRow | undefined;
+}
+
+export function itemById(db: DatabaseSync, id: number): ItemRow | undefined {
+  return db.prepare('SELECT * FROM stavka_dokumenta WHERE id = ?').get(id) as unknown as ItemRow | undefined;
+}
+
 export function documentItems(db: DatabaseSync, documentId: number): ItemRow[] {
   return db
     .prepare('SELECT * FROM stavka_dokumenta WHERE dokument_id = ? ORDER BY redni_broj')
@@ -54,16 +91,46 @@ export function saveDeliveryNote(db: DatabaseSync, draft: DocumentDraft): { id: 
   if (draft.kind !== 'delivery_note') {
     throw new Error(`${draft.file} is an ${draft.kind}, not a delivery note`);
   }
-  const existing = findDocument(db, 'OTPREMNICA', draft.number);
+  return saveDocument(db, 'OTPREMNICA', draft);
+}
+
+/**
+ * Stores an invoice the Document agent read as an ULAZNA_FAKTURA in status NACRT, with the
+ * delivery note it was issued for (veza_broj), so it can be compared with that delivery note's receipt.
+ * Saving the same invoice again returns the stored one and changes nothing.
+ */
+export function saveInvoice(db: DatabaseSync, draft: DocumentDraft): { id: number; created: boolean } {
+  if (draft.kind !== 'invoice') {
+    throw new Error(`${draft.file} is a ${draft.kind}, not an invoice`);
+  }
+  return saveDocument(db, 'ULAZNA_FAKTURA', draft);
+}
+
+/** Records that one document refers to another (schema: faktura -> prijemnica). */
+export function linkDocuments(db: DatabaseSync, documentId: number, linkedDocumentId: number): void {
+  db.prepare('UPDATE prometni_dokument SET povezani_dokument_id = ? WHERE id = ?').run(linkedDocumentId, documentId);
+}
+
+/** The confirmed receipt for an invoice: PRIJ-<the invoice's delivery note number>, if there is one. */
+export function receiptForInvoice(db: DatabaseSync, invoice: DocumentRow): DocumentRow | undefined {
+  return invoice.veza_broj ? findDocument(db, 'PRIJEMNICA', `PRIJ-${invoice.veza_broj}`) : undefined;
+}
+
+function saveDocument(
+  db: DatabaseSync,
+  vrsta: 'OTPREMNICA' | 'ULAZNA_FAKTURA',
+  draft: DocumentDraft,
+): { id: number; created: boolean } {
+  const existing = findDocument(db, vrsta, draft.number);
   if (existing) return { id: existing.id, created: false };
 
   return inTransaction(db, () => {
     const { lastInsertRowid } = db
       .prepare(
-        `INSERT INTO prometni_dokument (broj, vrsta, status, datum_dokumenta, dobavljac, izvorni_fajl)
-         VALUES (?, 'OTPREMNICA', 'NACRT', ?, ?, ?)`,
+        `INSERT INTO prometni_dokument (broj, vrsta, status, datum_dokumenta, dobavljac, izvorni_fajl, veza_broj)
+         VALUES (?, ?, 'NACRT', ?, ?, ?, ?)`,
       )
-      .run(draft.number, draft.date, draft.supplier, draft.file);
+      .run(draft.number, vrsta, draft.date, draft.supplier, draft.file, draft.relatedDocument);
     const id = Number(lastInsertRowid);
 
     const insertItem = db.prepare(

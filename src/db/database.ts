@@ -10,7 +10,12 @@ export const DEFAULT_DB_FILE = 'out/stockmind.sqlite';
 //   - CHECK constraints instead of ENUM types, INTEGER PRIMARY KEY instead of SERIAL;
 //   - the supplier is stored by name (dobavljac) instead of a poslovni_partner row;
 //   - an item stores the supplier code and name instead of a roba_ili_usluga row;
-//   - potvrdio records who confirmed a receipt (peer name and id).
+//   - potvrdio records who confirmed a receipt (peer name and id);
+//   - veza_broj is the linked document number as printed (an invoice's delivery note), so an
+//     invoice can be matched with its receipt even when the receipt is confirmed later;
+//   - nalaz has predlog (suggested action), iznos_bez_pdv (the difference in RSD without VAT),
+//     kljuc (what the finding is about, so the same finding is not recorded twice) and
+//     audit_napomena (the Auditor's reason for its verdict).
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS prometni_dokument (
   id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,6 +30,7 @@ CREATE TABLE IF NOT EXISTS prometni_dokument (
   povezani_dokument_id INTEGER REFERENCES prometni_dokument(id),
   izvorni_fajl         TEXT,
   potvrdio             TEXT,
+  veza_broj            TEXT,
   UNIQUE (vrsta, broj)
 );
 
@@ -43,7 +49,32 @@ CREATE TABLE IF NOT EXISTS stavka_dokumenta (
   izvor              TEXT NOT NULL,
   UNIQUE (dokument_id, redni_broj)
 );
+
+CREATE TABLE IF NOT EXISTS nalaz (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent         TEXT NOT NULL,
+  tip           TEXT NOT NULL CHECK (tip IN ('KOLICINA', 'CENA', 'ROK', 'PAD_PRODAJE', 'PAD_MARZE', 'MANJAK')),
+  opis          TEXT NOT NULL,
+  predlog       TEXT,
+  ocekivano     REAL,
+  stvarno       REAL,
+  iznos_bez_pdv REAL,
+  izvor         TEXT NOT NULL,
+  audit_status  TEXT NOT NULL DEFAULT 'CEKA' CHECK (audit_status IN ('CEKA', 'POTVRDJEN', 'ODBIJEN')),
+  dokument_id   INTEGER REFERENCES prometni_dokument(id),
+  stavka_id     INTEGER REFERENCES stavka_dokumenta(id),
+  kljuc         TEXT,
+  audit_napomena TEXT,
+  kreirano      TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
+
+/** Columns added after the first version of the schema, for database files made before them. */
+const ADDED_COLUMNS: ReadonlyArray<{ table: string; column: string; type: string }> = [
+  { table: 'prometni_dokument', column: 'veza_broj', type: 'TEXT' },
+  { table: 'nalaz', column: 'kljuc', type: 'TEXT' },
+  { table: 'nalaz', column: 'audit_napomena', type: 'TEXT' },
+];
 
 /** Opens (and if needed creates) the database. Pass ':memory:' for a throwaway one in tests. */
 export function openDatabase(file: string = DEFAULT_DB_FILE): DatabaseSync {
@@ -51,6 +82,10 @@ export function openDatabase(file: string = DEFAULT_DB_FILE): DatabaseSync {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  for (const { table, column, type } of ADDED_COLUMNS) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
   return db;
 }
 

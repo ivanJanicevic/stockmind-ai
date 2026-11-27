@@ -1,14 +1,16 @@
-// Goods receipt through Mozaik Network. Calls Gemini (one Document agent loop) and sends a few
-// network messages.
+// Goods receipt through Mozaik Network. Calls Gemini (one Document agent loop per new delivery
+// note) and sends a few network messages.
 //
-//   npm run receive -- otpremnice/otpremnica-05-kafa.pdf
+//   npm run receive -- otpremnice/otpremnica-05-kafa.pdf      one delivery note
+//   npm run receive -- sve                                     every delivery note in data/otpremnice
 //
-// 1. The Document agent reads the delivery note; it is saved in SQLite as an OTPREMNICA (NACRT).
-// 2. The peer "Document agent" posts its items in your network (MOZAIK_INVITE in .env).
+// 1. Document agents read the delivery notes at the same time; each is saved in SQLite as an
+//    OTPREMNICA (NACRT). Notes already in the database are not read again; confirmed ones are skipped.
+// 2. The peer "Document agent" posts each note's items in your network (MOZAIK_INVITE in .env).
 // 3. Anyone in the network answers: "potvrdi OT-2026-01197" or "potvrdi OT-2026-01197 ZP-ESP-1000=19",
 //    from the network's web page or with: npm run owner -- "potvrdi OT-2026-01197".
 // 4. A PRIJEMNICA (POTVRDJEN) with the received quantities is written, recording who confirmed it,
-//    and the answer is posted.
+//    and the answer is posted. The process ends when every posted note is confirmed.
 //
 // Only messages that start with "potvrdi" are answered, and no answer starts with it,
 // so two processes like this one cannot keep answering each other.
@@ -17,13 +19,19 @@ import 'dotenv/config';
 
 import { loadConfig } from '../../config.js';
 import { openDatabase } from '../../db/database.js';
-import { createReceipt, saveDeliveryNote } from '../../db/documents.js';
+import {
+  createReceipt,
+  draftFromDatabase,
+  findDocument,
+  findDocumentByFile,
+  saveDeliveryNote,
+} from '../../db/documents.js';
+import type { DocumentDraft } from '../../domain/document-draft.js';
 import { parseConfirmation } from '../../domain/receipt-confirmation.js';
+import { limitModelCalls } from '../../model-rate-limit.js';
 import { connectPeer, PeerDirectory, rule, type MessageSent, type NetworkSession } from '../../network/connect.js';
 import { deliveryNoteMessage, receiptMessage } from './messages.js';
 import { listDocuments, processDocument } from './process-document.js';
-
-const file = process.argv[2] ?? 'otpremnice/otpremnica-05-kafa.pdf';
 
 function fail(message: string): never {
   console.error(`\n[error] ${message}`);
@@ -44,19 +52,43 @@ const config = (() => {
   }
 })();
 process.on('unhandledRejection', (error) => fail(describeError(error)));
+limitModelCalls(config.requestsPerMinute);
 
-const known = (await listDocuments()).find((d) => d.file === file);
-if (!known || known.kind !== 'delivery_note') {
-  fail(`"${file}" is not one of the delivery notes in data/otpremnice/.`);
+// Which delivery notes: "sve" or a list of files.
+const args = process.argv.slice(2);
+const deliveryNotes = (await listDocuments()).filter((d) => d.kind === 'delivery_note').map((d) => d.file);
+const files = args.length === 0 || args.includes('sve') ? deliveryNotes : args;
+const unknown = files.filter((f) => !deliveryNotes.includes(f));
+if (unknown.length > 0) {
+  fail(`not delivery notes in data/otpremnice/: ${unknown.join(', ')}\nAvailable:\n  ${deliveryNotes.join('\n  ')}`);
 }
 
-// 1. Read the delivery note and keep it in the database as a draft.
+// 1. Read the notes that are not in the database yet, all at the same time.
 const db = openDatabase();
-const draft = await processDocument(file, config.models[0]!).catch((error) => fail(describeError(error)));
-const stored = saveDeliveryNote(db, draft);
-console.log(
-  `\n[db] OTPREMNICA ${draft.number} ${stored.created ? 'saved as NACRT' : 'was already in the database'} (id ${stored.id})`,
-);
+const isConfirmed = (number: string) => findDocument(db, 'PRIJEMNICA', `PRIJ-${number}`) !== undefined;
+
+const drafts = await Promise.all(
+  files.map(async (file): Promise<DocumentDraft> => {
+    const stored = findDocumentByFile(db, 'OTPREMNICA', file);
+    if (stored) {
+      console.log(`[db] ${file}: OTPREMNICA ${stored.broj} is already in the database, not read again`);
+      return draftFromDatabase(db, stored);
+    }
+    const draft = await processDocument(file, config.models[0]!);
+    const saved = saveDeliveryNote(db, draft);
+    console.log(`[db] ${file}: OTPREMNICA ${draft.number} saved as NACRT (id ${saved.id})`);
+    return draft;
+  }),
+).catch((error) => fail(describeError(error)));
+
+const waiting = new Set(drafts.filter((d) => !isConfirmed(d.number)).map((d) => d.number));
+for (const draft of drafts) {
+  if (!waiting.has(draft.number)) console.log(`[db] ${draft.number} is already confirmed as PRIJ-${draft.number}`);
+}
+if (waiting.size === 0) {
+  console.log('\nEvery delivery note is already confirmed. Nothing to post.');
+  process.exit(0);
+}
 
 // 2. Join the network with a policy of two rules.
 const directory = new PeerDirectory();
@@ -103,15 +135,22 @@ async function onConfirmation(envelope: MessageSent): Promise<void> {
   await session.send(answer);
   console.log(`\n[db] ${answer}`);
 
-  if (result.deliveryNote === draft.number) {
-    await session.leave();
-    process.exit(0);
+  waiting.delete(result.deliveryNote);
+  if (waiting.size > 0) {
+    console.log(`[network] still waiting for: ${[...waiting].join(', ')}`);
+    return;
   }
+  console.log('\nEvery posted delivery note is confirmed.');
+  await session.leave();
+  process.exit(0);
 }
 
 session = await connectPeer({ name: 'Document agent', role: 'agent', policy });
 console.log(`[network] "Document agent" joined network ${session.networkId}`);
 
-// 3. Ask the owner to check the goods against the delivery note.
-await session.send(deliveryNoteMessage(draft));
-console.log(`[network] posted delivery note ${draft.number}; waiting for anyone in the network to confirm (Ctrl+C to stop)`);
+// 3. Ask for a confirmation of each note that is not confirmed yet.
+for (const draft of drafts.filter((d) => waiting.has(d.number))) {
+  await session.send(deliveryNoteMessage(draft));
+  console.log(`[network] posted delivery note ${draft.number} (${draft.file})`);
+}
+console.log(`[network] waiting for confirmations of: ${[...waiting].join(', ')} (Ctrl+C to stop)`);

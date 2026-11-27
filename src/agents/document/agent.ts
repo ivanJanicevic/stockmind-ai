@@ -13,7 +13,8 @@ For the document named in the task:
 3. Copy every line item in printed order, with the line number it is printed on: supplier code
    (Šifra), name, unit (JM), quantity, price per unit without VAT (invoices), and expiry date
    (Rok trajanja, delivery notes) as YYYY-MM-DD.
-4. Call save_document_draft once with the header and all items.
+4. Call save_document_draft once with the header and all items. Write every item out in full,
+   as an object with all its fields; never shorten the list or use placeholders such as "...".
 5. If it returns "saved": false, fix exactly the values listed in "errors" by looking at the quoted
    line, and call save_document_draft again.
 
