@@ -34,7 +34,8 @@ export interface AnalystResult {
 export interface TimelineEntry {
   agent: string;
   role: string;
-  startedAt?: number; // ms since run start
+  queuedAt?: number; // ms since run start
+  startedAt?: number;
   answeredAt?: number;
   status: string;
 }

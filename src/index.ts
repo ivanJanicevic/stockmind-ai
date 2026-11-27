@@ -33,6 +33,7 @@ import { parseVerification, unsourcedFigures } from './parsing.js';
 import { WhenAnyAnswer, WhenInferenceCompleted, answerText } from './events.js';
 import { buildPaymentCsv, type PaymentOrder } from './payments.js';
 import { buildReport, DISCLAIMER, rsd, type AnalystResult, type TimelineEntry } from './report.js';
+import { startDashboard } from './dashboard.js';
 import {
   CLAIMS_WRITER,
   CLAIM_OUTPUT,
@@ -77,6 +78,9 @@ const config: Config = (() => {
 // Human approver: `npm run dev -- --approve F-ZP-2026-01184` releases an
 // invoice above the agent's limit. It cannot release a held invoice.
 const approved: ReadonlySet<string> = new Set(parseApprovals(process.argv.slice(2)));
+// `npm run demo` (--dashboard): live page on DASHBOARD_PORT (default 3000).
+const dashboardWanted = process.argv.includes('--dashboard');
+let dashboardUrl: string | null = null;
 
 // ---------------------------------------------------------------------------
 // Data and deterministic analysis (no model involved)
@@ -192,7 +196,10 @@ const stamp = () => `[+${(elapsed() / 1000).toFixed(1)}s]`;
 function run(agent: Agent, message: string, output: OutputFormat): void {
   pendingLoops.set(agent.getId(), { agent, message, output });
   const entry = state.timeline.get(agent.getId());
-  if (entry) entry.status = 'queued';
+  if (entry) {
+    entry.status = 'queued';
+    entry.queuedAt ??= elapsed();
+  }
   callQueue.push(() => {
     calls++;
     if (entry) {
@@ -420,6 +427,43 @@ join(monitor);
 // Finish: decisions, payment draft, report
 
 let finished = false;
+let final: { decisions: Map<string, Decision>; paymentTotal: number } | undefined;
+
+// What the live dashboard shows; read-only view of the shared state.
+function snapshot(): unknown {
+  return {
+    finished,
+    elapsedMs: elapsed(),
+    model: currentModel(),
+    calls,
+    tokens: `${tokens.input} in / ${tokens.output} out`,
+    network: networkStatus,
+    timeline: [...state.timeline.values()].filter((t) => t.status !== 'idle'),
+    cases: state.cases.map((c) => {
+      const read = invoiceIn.has(c.id) && noteIn.has(c.id);
+      const status = !read ? 'reading' : (final?.decisions.get(c.id) ?? decide(c, config.approvalLimitRsd, approved));
+      return {
+        invoiceNo: c.invoice?.invoiceNumber.value ?? c.invoiceFile,
+        supplier: c.invoice?.supplierName.value ?? '',
+        amount: c.invoice?.totalAmount.value ?? null,
+        status,
+        why: [...c.errors, ...blockingFailures(c).map((x) => x.detail)],
+        claim: c.claim?.to ?? null,
+      };
+    }),
+    atStake: round2(state.cases.flatMap((c) => blockingFailures(c)).reduce((s, x) => s + x.impactRsd, 0)),
+    paymentTotal: final?.paymentTotal ?? null,
+    analyses: state.analyses.map((a) => ({
+      agent: a.agent,
+      done: a.done,
+      error: a.error ?? null,
+      accepted: a.accepted.map(({ id, severity, headline }) => ({ id, severity, headline })),
+      rejected: a.rejected.length,
+    })),
+    review: state.review?.review ?? null,
+    reviewNote: state.reviewNote ?? null,
+  };
+}
 
 const allDone = () => state.cases.every((c) => c.done) && state.analyses.every((a) => a.done) && state.reviewDone;
 
@@ -452,6 +496,7 @@ function finish(exitCode: number): void {
       };
     });
   const paymentTotal = round2(orders.reduce((s, o) => s + o.amount, 0));
+  final = { decisions, paymentTotal };
 
   mkdirSync(OUT_DIR, { recursive: true });
   const paymentFile = orders.length ? `${OUT_DIR}/payment-draft.csv` : null;
@@ -503,6 +548,11 @@ function finish(exitCode: number): void {
   console.log(`Run: ${calls} model calls, ${(elapsed() / 1000).toFixed(1)} s, tokens ${tokens.input} in / ${tokens.output} out, Mozaik Network: ${networkStatus}`);
   console.log(`\n${DISCLAIMER}`);
 
+  if (dashboardUrl) {
+    console.log(`\nDashboard still open at ${dashboardUrl} — press Ctrl+C to exit.`);
+    process.exitCode = exitCode;
+    return;
+  }
   process.exit(exitCode);
 }
 
@@ -663,10 +713,21 @@ console.log(
 if (approved.size) console.log(`Human approval given for: ${[...approved].join(', ')}`);
 console.log('');
 
-startNetwork();
-for (const a of state.analyses) run(analystAgent.get(a.key)!, rowsMessage(a.rows), FINDINGS_OUTPUT_FORMAT);
-for (const c of state.cases) {
-  const { invoice, note } = clerks.get(c.id)!;
-  run(invoice, documentMessage(`data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`, c.invoiceText), INVOICE_OUTPUT);
-  run(note, documentMessage(`data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`, c.noteText), NOTE_OUTPUT);
+async function main(): Promise<void> {
+  if (dashboardWanted) {
+    const dashboard = await startDashboard(Number(process.env.DASHBOARD_PORT ?? 3000), snapshot);
+    if (dashboard) {
+      dashboardUrl = dashboard.url;
+      console.log(`Live dashboard: ${dashboardUrl}\n`);
+    }
+  }
+  startNetwork();
+  for (const a of state.analyses) run(analystAgent.get(a.key)!, rowsMessage(a.rows), FINDINGS_OUTPUT_FORMAT);
+  for (const c of state.cases) {
+    const { invoice, note } = clerks.get(c.id)!;
+    run(invoice, documentMessage(`data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`, c.invoiceText), INVOICE_OUTPUT);
+    run(note, documentMessage(`data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`, c.noteText), NOTE_OUTPUT);
+  }
 }
+
+void main();

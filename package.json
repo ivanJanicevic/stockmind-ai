@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx src/index.ts",
+    "demo": "tsx src/index.ts --dashboard",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "build": "tsc",
