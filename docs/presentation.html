@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StockMind AI — café finance desk</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#eef0f4; --muted:#8f98ab; --accent:#7c6cf2;
+          --ok:#3ccf7a; --held:#ef5b5b; --wait:#e9b949; --blue:#2f9cf4; --teal:#22b8a6; --orange:#f29d38; --pink:#e75d8c; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:20px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  .slide { position:absolute; inset:0; padding:6vh 7vw; display:none; flex-direction:column; justify-content:center; }
+  .slide.on { display:flex; }
+  h1 { font-size:2.6em; margin:0 0 .2em; letter-spacing:-.02em; } h2 { font-size:1.7em; margin:0 0 .6em; }
+  .kicker { color:var(--accent); text-transform:uppercase; letter-spacing:.12em; font-size:.75em; margin-bottom:.6em; }
+  .muted { color:var(--muted); } .small { font-size:.8em; }
+  ul { margin:.2em 0; padding-left:1.1em; } li { margin:.35em 0; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:2.5vw; } .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:2vw; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:1em 1.2em; }
+  .big { font-size:2.2em; font-weight:800; } .ok { color:var(--ok); } .held { color:var(--held); } .wait { color:var(--wait); }
+  table { border-collapse:collapse; width:100%; font-size:.78em; } td, th { padding:.35em .5em; border-bottom:1px solid var(--line); text-align:left; } th { color:var(--muted); font-weight:500; }
+  .num { text-align:right; white-space:nowrap; }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:1em 1.2em; font-size:.62em; line-height:1.5; overflow:hidden; }
+  .lane { display:grid; grid-template-columns: 11em 1fr; gap:.3em .8em; align-items:center; font-size:.62em; }
+  .track { position:relative; height:1em; background:#11141a; border-radius:4px; } .bar { position:absolute; top:.15em; height:.7em; border-radius:3px; }
+  .footer { position:fixed; bottom:2.5vh; left:7vw; right:7vw; display:flex; justify-content:space-between; font-size:.6em; color:var(--muted); }
+  .tag { display:inline-block; padding:.1em .55em; border-radius:99px; background:var(--line); font-size:.75em; margin-right:.3em; }
+</style>
+</head>
+<body>
+
+<section class="slide on">
+  <div class="kicker">JigJoy hackathon · Agents in Finance · built on Mozaik</div>
+  <h1>StockMind AI</h1>
+  <h2 class="muted" style="font-weight:500">A finance desk of AI agents for a small café</h2>
+  <p>Checks every supplier invoice against what was delivered and agreed, drafts payments only when everything matches, and explains what is eating the margin, with a source for every number.</p>
+  <p class="muted small">Synthetic data · Kafe „Plava Šolja“, Belgrade · RSD · Not financial advice</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>A café owner pays invoices nobody checked</h2>
+  <div class="grid">
+    <div class="card"><ul>
+      <li>Supplier invoices, delivery notes, a POS export and monthly bills, but <b>no finance team</b></li>
+      <li>Over-invoiced quantities, prices above the agreed list and expired goods get paid by default</li>
+      <li>Supplier price rises and new costs quietly turn a profitable month into a loss</li>
+    </ul></div>
+    <div class="card"><ul>
+      <li><b>User:</b> the owner or bookkeeper of a small café or shop</li>
+      <li><b>Data:</b> 7 invoices + 7 delivery notes (PDF), 2.000 POS rows, agreed purchase prices, recipes, monthly costs</li>
+      <li><b>Output:</b> a payment draft (never sent), held invoices with claims, and this week's priorities</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Architecture</div>
+  <h2>20 agents start at once on one shared state</h2>
+<pre> t=0 ──┬─ Stock Analyst ─────────┐   code-computed rows: stock vs deliveries
+       ├─ Sales Analyst ─────────┤   weekly demand per product
+       ├─ Margin &amp; Cost Analyst ─┤   price rises, margins, P&amp;L, cost changes
+       ├─ Invoice Clerk 01 ──┐   │
+       ├─ Receiving Clerk 01 ┴─ three-way match ─ held? ─> Claims Writer 01
+       │        …  7 invoice / delivery-note pairs, all in parallel  …
+       └─ Receiving Clerk 08 ┴─ three-way match ─ held? ─> Claims Writer 08
+                                 │
+             all specialists in ─┴─> Reviewer ─> payment decision ─> human --approve
+
+  Mozaik RuntimeState holds every result · a Monitoring participant reacts to
+  model.answer events and starts the agents that depend on them</pre>
+</section>
+
+<section class="slide">
+  <div class="kicker">Genuine concurrency</div>
+  <h2>The agents really overlap</h2>
+  <div class="grid">
+    <div>
+      <ul>
+        <li>All analysts and clerks are <b>launched together</b>; a rate-limited queue spaces calls to the free tier</li>
+        <li>A pair's match and claim start the moment <b>its two clerks</b> answer, while others still work</li>
+        <li>The Reviewer is triggered by the event that the <b>last specialist</b> finished</li>
+        <li>Live dashboard: <code>npm run demo</code> → every loop as a bar on a timeline</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="lane" id="lanes"></div>
+      <p class="muted small" style="margin:.6em 0 0">Illustration of the timeline shape; the real one is in the dashboard and in out/review.md.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Checks between agents</div>
+  <h2>No agent is trusted alone</h2>
+  <div class="grid3">
+    <div class="card"><b>Two clerks, two documents</b><p class="small muted">The invoice clerk and the receiving clerk read different PDFs; code compares their readings with each other and with the agreed prices.</p></div>
+    <div class="card"><b>Every value is quoted</b><p class="small muted">Each value carries a verbatim quote that must be a whole printed row of the document, and amounts must appear as printed ("175,00").</p></div>
+    <div class="card"><b>Every figure is sourced</b><p class="small muted">Analysts, the reviewer and claims may only use figures from the rows they cite; anything else is rejected and listed in the report.</p></div>
+  </div>
+  <p class="small">Fails closed: a misread holds an invoice, it never pays it. A large clean invoice still waits for a human: <code>--approve</code> can't release a held one.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">Result on the sample data</div>
+  <h2>5 invoices held · 15.326,40 RSD at stake</h2>
+  <table>
+    <tr><th>Invoice</th><th>Problem found</th><th class="num">At stake</th><th>Decision</th></tr>
+    <tr><td>F-OPT-2026-0931</td><td>Coca-Cola 79,00 vs agreed 72,00</td><td class="num">806,40</td><td class="held">held + claim</td></tr>
+    <tr><td>F-ZP-2026-01197</td><td>Espresso beans: 22 invoiced, 20 delivered</td><td class="num">5.880,00</td><td class="held">held + claim</td></tr>
+    <tr><td>F-OPT-2026-0988</td><td>Sprite: 72 invoiced, 48 delivered</td><td class="num">2.016,00</td><td class="held">held + claim</td></tr>
+    <tr><td>F-HS-2026-0412</td><td>Jelen: 140 invoiced, 120 delivered</td><td class="num">2.880,00</td><td class="held">held + claim</td></tr>
+    <tr><td>F-MD-2026-55271</td><td>Oat drink expired before delivery</td><td class="num">3.744,00</td><td class="held">held + claim</td></tr>
+    <tr><td>F-ZP-2026-01184</td><td>Clean, 89.024,00 above the 50.000 agent limit</td><td class="num">–</td><td class="wait">needs human</td></tr>
+    <tr><td>F-MD-2026-55302</td><td>Everything matches</td><td class="num">–</td><td class="ok">payment draft</td></tr>
+  </table>
+  <p class="small muted">Also reported, not paid: 3 register invoices with no document to check.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">Beyond the invoices</div>
+  <h2>What is eating the margin</h2>
+  <div class="grid">
+    <div class="card"><div class="big held">−16.998,72</div><div class="muted">RSD monthly run-rate after the price rise, was +30.079,68</div></div>
+    <div class="card"><ul class="small">
+      <li><b>Stock:</b> Schweppes Tonic sold 28, delivered 24; first oversell on POS row 1905</li>
+      <li><b>Demand:</b> Karamel latte 39 → 27 → 22 → 7 per week (−82 %), price unchanged</li>
+      <li><b>Margins:</b> espresso beans +42 % → espresso margin 88,75 % → 84,42 %</li>
+      <li><b>Costs:</b> rent, electricity, card fees, maintenance +50.550 RSD a month</li>
+    </ul></div>
+  </div>
+  <p class="small muted">All computed by code from data/ with file:line sources; tests pin every figure. Agents interpret, they never invent numbers.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">Try it</div>
+  <h2>Runs from the README on a free Gemini key</h2>
+<pre>npm install
+cp .env.example .env        # GEMINI_API_KEY=…
+npm run demo                # live dashboard on http://localhost:3000
+npm run dev -- --approve F-ZP-2026-01184   # act as the human approver
+npm test                    # unit tests, no API calls</pre>
+  <p class="small">Outputs <code>out/review.md</code> (every hold with evidence, findings, reviewer actions, agent timeline) and <code>out/payment-draft.csv</code> (draft, not sent).</p>
+  <p class="small muted">Synthetic data only · Not financial advice · No payment or e-mail is ever sent</p>
+</section>
+
+<div class="footer"><span>StockMind AI — café finance desk</span><span id="pager"></span></div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let i = 0;
+  const show = (n) => { i = Math.max(0, Math.min(slides.length - 1, n)); slides.forEach((s, k) => s.classList.toggle('on', k === i)); document.getElementById('pager').textContent = (i + 1) + ' / ' + slides.length + '   ← →'; };
+  addEventListener('keydown', (e) => { if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) show(i + 1); if (['ArrowLeft', 'PageUp'].includes(e.key)) show(i - 1); });
+  addEventListener('click', () => show(i + 1));
+  // Illustrative timeline: analysts and the first 10 calls start at t=0, the rest when the rate limit allows.
+  const lanes = [['Stock Analyst', 0, 9, 'accent'], ['Sales Analyst', 0, 7, 'accent'], ['Margin & Cost Analyst', 0, 12, 'accent'],
+    ['Invoice Clerk 01', 0, 10, 'blue'], ['Receiving Clerk 01', 0, 6, 'teal'], ['Invoice Clerk 03', 0, 11, 'blue'], ['Receiving Clerk 03', 0, 7, 'teal'],
+    ['Claims Writer 03', 12, 20, 'orange'], ['Invoice Clerk 05', 60, 70, 'blue'], ['Receiving Clerk 05', 60, 66, 'teal'], ['Claims Writer 05', 71, 80, 'orange'], ['Reviewer', 120, 132, 'pink']];
+  document.getElementById('lanes').innerHTML = lanes.map(([n, a, b, c]) => '<div>' + n + '</div><div class="track"><div class="bar" style="left:' + (a / 1.35) + '%;width:' + ((b - a) / 1.35) + '%;background:var(--' + c + ')"></div></div>').join('');
+  show(0);
+</script>
+</body>
+</html>

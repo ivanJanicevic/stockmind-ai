@@ -85,6 +85,7 @@ Every row below is found by code from `data/`, and the tests in `test/` pin each
 | `src/analytics.ts` | Stock check, weekly trend, price rises, margins, period result |
 | `src/findings.ts` | Guards for analyst findings and the review |
 | `src/payments.ts`, `src/report.ts` | Payment draft CSV and `out/review.md` |
+| `src/dashboard.ts` | Optional live dashboard (`npm run demo`), no dependencies |
 | `src/data/load.ts` | Loads `data/` with line numbers |
 | `data/` | Synthetic café dataset (see `data/README.md`); `data/text/` is the text layer of the PDFs |
 
@@ -102,6 +103,7 @@ npm run dev
 
 - **Run time and cost:** about 23 model calls, roughly 2.5 minutes at the default 10 calls per minute. Set `REQUESTS_PER_MINUTE=14` on Flash Lite to make it faster.
 - **Output:** `out/review.md` and `out/payment-draft.csv`.
+- **Live dashboard:** `npm run demo` runs the same desk and serves http://localhost:3000 (`DASHBOARD_PORT` to change it). Every agent loop appears as a bar on a timeline, so you can see them overlap, and the invoices update as they are matched. The page stays open after the run; press Ctrl+C to exit. It's optional: if the port is taken, the run continues without it.
 - **Human approval:** to approve the invoice above the limit as the human approver, run `npm run dev -- --approve F-ZP-2026-01184`. It is then added to the payment draft as "Approved by human". Approving a held invoice has no effect.
 
 End of a run: the invoice decisions are deterministic, while finding counts depend on the model:
@@ -137,6 +139,11 @@ Payment draft: out/payment-draft.csv (1 orders, 35.102,80 RSD)
 - The peers mirror the agent names for visibility only. They receive no data and do no work; the collaboration happens in the local Mozaik runtime.
 - Joining runs in the background with a 15 s timeout and can never stop a run. The report shows the Network status.
 
+## Demo material
+
+- `docs/presentation.html`: slides; open it in a browser and use ← / →.
+- `docs/video-script.md`: a 2-minute recording script, synced to the slides and the live dashboard.
+
 ## Tests
 
 ```bash
@@ -168,6 +175,7 @@ npm run typecheck
 
 ```bash
 npm run dev        # Run the desk (calls the model)
+npm run demo       # Same, with the live dashboard on http://localhost:3000
 npm test           # Unit tests, no API calls
 npm run typecheck  # Type-check
 npm run build      # Compile to dist/
