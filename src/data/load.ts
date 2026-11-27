@@ -1,7 +1,7 @@
 // Loads the café dataset in data/ (synthetic, RSD). Every row keeps the line
 // number of its source file so any number the app reports can be traced back.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // Works from src/data/ (tsx) and dist/data/ (compiled) alike.
@@ -14,6 +14,7 @@ export const FILES = {
   products: 'artikli.json',
   recipes: 'normativi.json',
   suppliers: 'dobavljaci.json',
+  planning: 'planiranje.json', // synthetic planning parameters (optional)
 } as const;
 
 export const ref = (file: string, line: number) => `${file}:${line}`;
@@ -199,6 +200,24 @@ export function loadRecipes(purchases: Purchase[]): { materials: Map<string, Mat
     );
   }
   return { materials, recipes };
+}
+
+// Optional synthetic planning parameters (lead times, safety stock). Absent
+// file → null, and replenishment reports what is missing instead.
+export function loadPlanningParams(): { synthetic: boolean; leadTimeDays: Record<string, number>; safetyStockDays: number; reviewPeriodDays: number } | null {
+  if (!existsSync(DATA_DIR + FILES.planning)) return null;
+  const raw = JSON.parse(readText(FILES.planning)) as {
+    sinteticki_podaci: boolean;
+    rok_isporuke_dana: Record<string, number>;
+    sigurnosna_zaliha_dana: number;
+    period_pregleda_dana: number;
+  };
+  return {
+    synthetic: raw.sinteticki_podaci,
+    leadTimeDays: raw.rok_isporuke_dana,
+    safetyStockDays: raw.sigurnosna_zaliha_dana,
+    reviewPeriodDays: raw.period_pregleda_dana,
+  };
 }
 
 export function loadDataset(): Dataset {

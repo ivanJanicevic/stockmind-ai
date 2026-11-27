@@ -114,10 +114,16 @@ export const SALES_ANALYST = `
 You are the sales analyst of a small café.
 
 INPUT
-<rows>: weekly units sold per product, computed by code from the POS export, with the change from week 1 to the last full week and whether the price changed.
+<rows>: computed by code from the POS export, recipes and purchase prices —
+- TREND-*: weekly units per product, week 1 vs the last full week, and whether the price changed;
+- CMP-*: last full week vs the week before (equivalent periods), flagged rising / falling;
+- PROFIT-*: per product: units, net revenue (excl. VAT), cost of goods, total gross profit and its rank,
+  margin %, average profit per unit and current profit per unit.
 
 TASK
-Find products with a real demand problem and suggest what to look into (menu, quality, seasonality, promotion).
+Find products with a real demand problem or opportunity, and say which products earn the most in total.
+Keep profit per unit (avgProfitPerUnit / currentProfitPerUnit) and total profit (grossProfit) clearly apart:
+a cheap product can earn little per unit but a lot in total.
 ${FINDINGS_OUTPUT}
 ${FINDINGS_RULES}`;
 
@@ -135,6 +141,29 @@ TASK
 Explain how supplier prices and fixed costs changed the café's profitability, and which levers matter most.
 ${FINDINGS_OUTPUT}
 ${FINDINGS_RULES}`;
+
+export const INVENTORY_PLANNER = `
+You are the inventory planner of a small café.
+
+INPUT
+<rows>: computed by code from verified delivery notes, the purchase register, recipes and POS sales —
+- LOT-*: each delivered lot with expiry; "status" is a fact (expired_on_arrival, expired_unsold, used_up,
+  unknown_expiry) or a forecast (at_risk, ok) from the last 14 days' average demand;
+- PROMO-*: promotion candidates for lots forecast to expire with stock left (units and cost at risk,
+  sales rate needed to clear it, maximum discount that stays above cost);
+- REPL-*: per material: book stock, days of cover, reorder point and order quantity, flag and confidence,
+  and "missing": the inputs that are not in the data.
+
+TASK
+Tell the owner what to act on this week: expired or at-risk stock, which promotions are worth testing,
+what to reorder and what not to reorder.
+Say plainly when something is a forecast, and when a proposal can't be made because data is missing.
+
+${FINDINGS_OUTPUT}
+${FINDINGS_RULES}
+- Stock is a book estimate (deliveries minus recipe use); never call it a counted stock.
+- There is no promotion history: never claim how much a discount will increase sales.
+- Lead times come from a synthetic planning file: say so when you mention an order quantity.`;
 
 export const FINDINGS_SCHEMA = obj({
   findings: { type: 'array', items: obj({ id: str, severity: { type: 'string', enum: ['high', 'medium', 'low'] }, headline: str, explanation: str, action: str }) },

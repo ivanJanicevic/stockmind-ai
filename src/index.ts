@@ -14,7 +14,7 @@ import { HOSTED_NETWORK, readInviteLink } from '@jigjoy/mozaik-network/invite-li
 import { NetworkClient } from '@jigjoy/mozaik-network/network-client';
 
 import { loadConfig, parseApprovals, type Config } from './config.js';
-import { DATA_DIR, loadDataset } from './data/load.js';
+import { DATA_DIR, loadDataset, loadPlanningParams } from './data/load.js';
 import { periodResult, priceChanges, round2, stockCheck, unitMargins, weeklyTrend } from './analytics.js';
 import {
   blockingFailures,
@@ -27,12 +27,25 @@ import {
   type ApCase,
   type Decision,
 } from './ap.js';
-import { parseInvoice, parseNote } from './documents.js';
+import { parseInvoice, parseNote, verifyNote } from './documents.js';
+import {
+  buildLots,
+  buildRecommendationsCsv,
+  buildSalesCsv,
+  lotRisk,
+  periodComparison,
+  productProfit,
+  promotionCandidates,
+  recommendationLines,
+  replenishment,
+  salesByPeriod,
+  type NoteLot,
+} from './planning.js';
 import { allowedFigures, parseFindings, parseReview, type Rejected, type Review } from './findings.js';
 import { parseVerification, unsourcedFigures } from './parsing.js';
 import { WhenAnyAnswer, WhenInferenceCompleted, answerText } from './events.js';
 import { buildPaymentCsv, type PaymentOrder } from './payments.js';
-import { buildReport, DISCLAIMER, rsd, type AnalystResult, type TimelineEntry } from './report.js';
+import { buildReport, DISCLAIMER, rsd, type AnalystResult, type PlanningSection, type TimelineEntry } from './report.js';
 import { startDashboard } from './dashboard.js';
 import {
   CLAIMS_WRITER,
@@ -47,6 +60,7 @@ import {
   REVIEW_OUTPUT,
   SALES_ANALYST,
   STOCK_ANALYST,
+  INVENTORY_PLANNER,
   claimMessage,
   documentMessage,
   reviewMessage,
@@ -77,7 +91,9 @@ const config: Config = (() => {
 
 // Human approver: `npm run dev -- --approve F-ZP-2026-01184` releases an
 // invoice above the agent's limit. It cannot release a held invoice.
-const approved: ReadonlySet<string> = new Set(parseApprovals(process.argv.slice(2)));
+// The dashboard can add approvals while it's open (same rule, see approveInvoice).
+const approved = new Set(parseApprovals(process.argv.slice(2)));
+const approvalNotes = new Map<string, string>([...approved].map((id) => [id, 'command line (--approve)']));
 // `npm run demo` (--dashboard): live page on DASHBOARD_PORT (default 3000).
 const dashboardWanted = process.argv.includes('--dashboard');
 let dashboardUrl: string | null = null;
@@ -89,11 +105,17 @@ const ds = loadDataset();
 const master = loadMaster();
 const { pnl, costChanges } = periodResult(ds);
 
-type Row = { id: string; sources: string[]; flagged?: boolean; oversold?: boolean };
+type Row = { id: string; sources: string[]; flagged?: boolean; oversold?: boolean; flag?: string; status?: string; rank?: number };
 const stockRows: Row[] = stockCheck(ds);
 const trendRows: Row[] = weeklyTrend(ds).filter((r) => r.weeks.some((w) => w > 0));
+const profitRows = productProfit(ds);
+const comparison = periodComparison(ds);
+const salesRows: Row[] = [...trendRows, ...comparison.rows.filter((r) => r.flag !== 'too few sales'), ...profitRows];
 const marginRows: Row[] = [...priceChanges(ds), ...unitMargins(ds).filter((r) => r.flagged), ...pnl, ...costChanges];
-const isFlagged = (r: Row) => r.flagged === true || r.oversold === true || /^(PRICE|PNL|COST)-/.test(r.id);
+const planningParams = loadPlanningParams();
+const FLAGS = new Set(['rising', 'falling', 'stockout_risk', 'overstock', 'insufficient_data', 'expired_on_arrival', 'expired_unsold', 'at_risk']);
+const isFlagged = (r: Row) =>
+  r.flagged === true || r.oversold === true || /^(PRICE|PNL|COST|PROMO)-/.test(r.id) || FLAGS.has(r.flag ?? '') || FLAGS.has(r.status ?? '') || (r.id.startsWith('PROFIT-') && (r.rank ?? 99) <= 3);
 
 const analysis = (key: string, title: string, agent: string, rows: Row[]): AnalystResult => ({
   key,
@@ -111,9 +133,12 @@ class AppState extends RuntimeState {
   cases: ApCase[] = loadCases(readdirSync(`${DATA_DIR}text`));
   analyses: AnalystResult[] = [
     analysis('stock', 'Stock vs deliveries', 'Stock Analyst', stockRows),
-    analysis('sales', 'Demand trends', 'Sales Analyst', trendRows),
+    analysis('sales', 'Demand, sales and profit by product', 'Sales Analyst', salesRows),
     analysis('margin', 'Margins and costs', 'Margin & Cost Analyst', marginRows),
+    // Rows are computed once every delivery note has been read and verified.
+    analysis('planning', 'Inventory planning', 'Inventory Planner', []),
   ];
+  planning: PlanningSection | undefined;
   review: { review: Review; rejected: Rejected[] } | undefined;
   reviewNote: string | undefined;
   reviewDone = false;
@@ -145,7 +170,7 @@ function register(name: string, role: Role, instruction: string, extra: { caseId
   return agent;
 }
 
-const analystInstruction: Record<string, string> = { stock: STOCK_ANALYST, sales: SALES_ANALYST, margin: MARGIN_ANALYST };
+const analystInstruction: Record<string, string> = { stock: STOCK_ANALYST, sales: SALES_ANALYST, margin: MARGIN_ANALYST, planning: INVENTORY_PLANNER };
 const analystAgent = new Map<string, Agent>();
 for (const a of state.analyses) analystAgent.set(a.key, register(a.agent, 'analyst', analystInstruction[a.key]!, { analyst: a.key }));
 
@@ -247,6 +272,72 @@ function handleNote(c: ApCase, answer: string): void {
   else c.errors.push(`receiving clerk answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
   noteIn.add(c.id);
   completePair(c);
+  if (state.cases.every((x) => noteIn.has(x.id))) startPlanner();
+}
+
+// Lots, expiry risk, promotion candidates and replenishment, from the delivery
+// notes whose reading verified against the document text. Unverified notes are
+// left out (their deliveries become lots with unknown expiry).
+function computePlanning(): PlanningSection {
+  const excluded: string[] = [];
+  const noteLots: NoteLot[] = [];
+  for (const c of state.cases) {
+    const problems = c.note ? verifyNote(c.note, c.noteText) : ['not read'];
+    if (problems.length) {
+      excluded.push(`${c.noteFile}: ${problems[0]}`);
+      continue;
+    }
+    for (const l of c.note!.lines) {
+      noteLots.push({
+        noteNo: c.note!.noteNumber.value,
+        deliveryDate: c.note!.deliveryDate.value,
+        code: l.code,
+        quantity: l.quantity,
+        expiryDate: l.expiryDate,
+        source: `text/${c.noteFile}: "${l.quote}"`,
+      });
+    }
+  }
+  const { lots, unmatched } = buildLots(ds, noteLots);
+  const { rows: lotRows, uncovered } = lotRisk(ds, lots);
+  const promos = promotionCandidates(ds, lotRows);
+  const repl = replenishment(ds, lotRows, planningParams, uncovered);
+  return {
+    asOf: ds.sales.at(-1)!.date,
+    profit: profitRows,
+    comparison: comparison.rows,
+    monthly: comparison.monthly,
+    lots: lotRows,
+    promotions: promos,
+    replenishment: repl,
+    recommendations: recommendationLines(lotRows, promos, repl),
+    excludedNotes: excluded,
+    unusedItems: [...new Set(unmatched.map((u) => u.code))],
+    params: planningParams,
+  };
+}
+
+// Triggered by the event that the last delivery note is in; runs alongside
+// the claims writers and before the reviewer.
+let plannerStarted = false;
+function startPlanner(): void {
+  if (plannerStarted) return;
+  plannerStarted = true;
+  state.planning = computePlanning();
+  const a = state.analyses.find((x) => x.key === 'planning')!;
+  const p = state.planning;
+  a.rows = [
+    ...p.lots.filter((l) => l.status !== 'beyond_horizon' && l.status !== 'used_up'),
+    ...p.promotions,
+    ...p.replenishment.filter((r) => r.flag !== 'ok'),
+  ];
+  a.flaggedIds = (a.rows as Row[]).filter(isFlagged).map((r) => r.id);
+  if (!a.rows.length) {
+    a.error = 'nothing to plan: no lots or demand';
+    a.done = true;
+    return;
+  }
+  run(analystAgent.get('planning')!, rowsMessage(a.rows), FINDINGS_OUTPUT_FORMAT);
 }
 
 // Both clerks answered: check them against each other and the agreed prices.
@@ -429,40 +520,100 @@ join(monitor);
 let finished = false;
 let final: { decisions: Map<string, Decision>; paymentTotal: number } | undefined;
 
-// What the live dashboard shows; read-only view of the shared state.
+// What the live dashboard shows; a read-only view of the shared state.
 function snapshot(): unknown {
+  const p = state.planning;
   return {
     finished,
     elapsedMs: elapsed(),
     model: currentModel(),
     calls,
-    tokens: `${tokens.input} in / ${tokens.output} out`,
+    tokens: { input: tokens.input, output: tokens.output },
     network: networkStatus,
+    limitRsd: config.approvalLimitRsd,
+    agentsTotal: agents.size,
     timeline: [...state.timeline.values()].filter((t) => t.status !== 'idle'),
     cases: state.cases.map((c) => {
       const read = invoiceIn.has(c.id) && noteIn.has(c.id);
       const status = !read ? 'reading' : (final?.decisions.get(c.id) ?? decide(c, config.approvalLimitRsd, approved));
+      const inv = c.invoice;
+      const no = inv?.invoiceNumber.value ?? null;
       return {
-        invoiceNo: c.invoice?.invoiceNumber.value ?? c.invoiceFile,
-        supplier: c.invoice?.supplierName.value ?? '',
-        amount: c.invoice?.totalAmount.value ?? null,
+        id: c.id,
+        invoiceNo: no ?? c.invoiceFile,
+        supplier: inv?.supplierName.value ?? '',
+        pib: inv?.supplierPib.value ?? null,
+        account: inv?.supplierAccount.value ?? null,
+        issueDate: inv?.issueDate.value ?? null,
+        dueDate: inv?.dueDate.value ?? null,
+        amount: inv?.totalAmount.value ?? null,
         status,
-        why: [...c.errors, ...blockingFailures(c).map((x) => x.detail)],
-        claim: c.claim?.to ?? null,
+        approvedBy: no ? (approvalNotes.get(no) ?? null) : null,
+        invoicePdf: `data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`,
+        notePdf: `data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`,
+        lines: (inv?.lines ?? []).map((l) => ({
+          code: l.code,
+          name: l.name,
+          quantity: l.quantity,
+          delivered: c.note?.lines.find((n) => n.code === l.code)?.quantity ?? null,
+          expiry: c.note?.lines.find((n) => n.code === l.code)?.expiryDate || null,
+          unit: l.unit,
+          unitPrice: l.unitPrice,
+          vatRate: l.vatRate,
+          lineTotal: l.lineTotal,
+        })),
+        checks: c.checks.map(({ name, ok, blocking, detail, impactRsd }) => ({ name, ok, blocking, detail, impactRsd })),
+        errors: c.errors,
+        claim: c.claim ?? null,
+        claimError: c.claimError ?? null,
       };
     }),
     atStake: round2(state.cases.flatMap((c) => blockingFailures(c)).reduce((s, x) => s + x.impactRsd, 0)),
     paymentTotal: final?.paymentTotal ?? null,
     analyses: state.analyses.map((a) => ({
+      key: a.key,
+      title: a.title,
       agent: a.agent,
       done: a.done,
       error: a.error ?? null,
-      accepted: a.accepted.map(({ id, severity, headline }) => ({ id, severity, headline })),
-      rejected: a.rejected.length,
+      accepted: a.accepted,
+      rejected: a.rejected,
     })),
     review: state.review?.review ?? null,
     reviewNote: state.reviewNote ?? null,
+    planning: p
+      ? {
+          asOf: p.asOf,
+          expired: p.lots.filter((l) => l.status === 'expired_on_arrival' || l.status === 'expired_unsold'),
+          atRisk: p.lots.filter((l) => l.status === 'at_risk'),
+          promotions: p.promotions,
+          replenishment: p.replenishment.filter((r) => r.flag !== 'ok'),
+          topProfit: p.profit.slice(0, 5),
+          moving: p.comparison.filter((x) => x.flag === 'rising' || x.flag === 'falling'),
+          syntheticParams: p.params?.synthetic ?? null,
+        }
+      : null,
   };
+}
+
+// Human approval from the dashboard. Same rule as --approve: only an invoice
+// that passed every check and waits only because it is above the agent limit.
+function approveInvoice(invoiceNo: string): { ok: boolean; message: string } {
+  const no = invoiceNo.trim().toUpperCase();
+  const c = state.cases.find((x) => x.invoice?.invoiceNumber.value.toUpperCase() === no);
+  if (!c?.invoice) return { ok: false, message: `${invoiceNo}: unknown invoice` };
+  const current = decide(c, config.approvalLimitRsd, approved);
+  if (current === 'approved') return { ok: true, message: `${no} was already approved` };
+  if (current === 'held') return { ok: false, message: `${no} is held (${[...c.errors, ...blockingFailures(c).map((x) => x.name)].join(', ')}); a held invoice can't be approved` };
+  if (current === 'ready') return { ok: false, message: `${no} is within the agent limit; no approval needed` };
+  approved.add(no);
+  approvalNotes.set(no, `dashboard at ${new Date().toLocaleTimeString('sr-RS')}`);
+  console.log(`[approval] ${no} approved in the dashboard`);
+  if (finished) {
+    const out = writeOutputs();
+    console.log(`[approval] payment draft updated: ${out.paymentFile} (${out.orders.length} orders, ${rsd(out.paymentTotal)})`);
+  }
+  return { ok: true, message: `${no} approved — added to the payment draft` };
 }
 
 const allDone = () => state.cases.every((c) => c.done) && state.analyses.every((a) => a.done) && state.reviewDone;
@@ -472,10 +623,9 @@ function finishIfDone(): void {
   if (!finished && allDone()) setImmediate(() => finish(0));
 }
 
-function finish(exitCode: number): void {
-  if (finished) return;
-  finished = true;
-
+// Decisions, payment draft, recommendations and report. Called at the end of
+// the run, and again when an approval is given in the dashboard.
+function writeOutputs() {
   const decisions = new Map<string, Decision>(state.cases.map((c) => [c.id, decide(c, config.approvalLimitRsd, approved)]));
   const orders: PaymentOrder[] = state.cases
     .filter((c) => ['ready', 'approved'].includes(decisions.get(c.id)!))
@@ -502,6 +652,11 @@ function finish(exitCode: number): void {
   const paymentFile = orders.length ? `${OUT_DIR}/payment-draft.csv` : null;
   if (paymentFile) writeFileSync(paymentFile, buildPaymentCsv(orders));
 
+  state.planning ??= computePlanning();
+  const recommendationsFile = `${OUT_DIR}/recommendations.csv`;
+  writeFileSync(recommendationsFile, buildRecommendationsCsv(state.planning.recommendations));
+  writeFileSync(`${OUT_DIR}/sales-by-product.csv`, buildSalesCsv(salesByPeriod(ds)));
+
   const reportFile = `${OUT_DIR}/review.md`;
   writeFileSync(
     reportFile,
@@ -509,7 +664,7 @@ function finish(exitCode: number): void {
       cases: state.cases,
       decisions,
       limitRsd: config.approvalLimitRsd,
-      approvalsGiven: [...approved],
+      approvalsGiven: [...approved].map((id) => `${id} (${approvalNotes.get(id) ?? 'approved'})`),
       missing: missingDocuments(ds.purchases, state.cases),
       analyses: state.analyses,
       ...(state.review ? { review: state.review } : {}),
@@ -524,8 +679,17 @@ function finish(exitCode: number): void {
       },
       paymentFile,
       paymentTotal,
+      planning: state.planning,
     })
   );
+  return { decisions, orders, paymentFile, paymentTotal, reportFile, recommendationsFile };
+}
+
+function finish(exitCode: number): void {
+  if (finished) return;
+  finished = true;
+  const { decisions, orders, paymentFile, paymentTotal, reportFile, recommendationsFile } = writeOutputs();
+  const planning = state.planning!;
 
   console.log('');
   for (const c of state.cases) {
@@ -541,10 +705,11 @@ function finish(exitCode: number): void {
   const waiting = state.cases.filter((c) => decisions.get(c.id) === 'needs_approval');
   if (waiting.length) {
     const ids = waiting.map((c) => c.invoice!.invoiceNumber.value).join(',');
-    console.log(`\nTo approve as a human, re-run with: npm run dev -- --approve ${ids}`);
+    console.log(`\nTo approve as a human, re-run with: npm run dev -- --approve ${ids}${dashboardUrl ? ` — or approve it in the dashboard` : ''}`);
   }
   console.log(`\nReport: ${reportFile}`);
   if (paymentFile) console.log(`Payment draft: ${paymentFile} (${orders.length} orders, ${rsd(paymentTotal)})`);
+  console.log(`Planning: ${recommendationsFile} (${planning.recommendations.length} rows), ${OUT_DIR}/sales-by-product.csv`);
   console.log(`Run: ${calls} model calls, ${(elapsed() / 1000).toFixed(1)} s, tokens ${tokens.input} in / ${tokens.output} out, Mozaik Network: ${networkStatus}`);
   console.log(`\n${DISCLAIMER}`);
 
@@ -715,14 +880,16 @@ console.log('');
 
 async function main(): Promise<void> {
   if (dashboardWanted) {
-    const dashboard = await startDashboard(Number(process.env.DASHBOARD_PORT ?? 3000), snapshot);
+    const dashboard = await startDashboard(Number(process.env.DASHBOARD_PORT ?? 3000), snapshot, approveInvoice);
     if (dashboard) {
       dashboardUrl = dashboard.url;
       console.log(`Live dashboard: ${dashboardUrl}\n`);
     }
   }
   startNetwork();
-  for (const a of state.analyses) run(analystAgent.get(a.key)!, rowsMessage(a.rows), FINDINGS_OUTPUT_FORMAT);
+  for (const a of state.analyses) {
+    if (a.key !== 'planning') run(analystAgent.get(a.key)!, rowsMessage(a.rows), FINDINGS_OUTPUT_FORMAT);
+  }
   for (const c of state.cases) {
     const { invoice, note } = clerks.get(c.id)!;
     run(invoice, documentMessage(`data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`, c.invoiceText), INVOICE_OUTPUT);

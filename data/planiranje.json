@@ -1,0 +1,12 @@
+{
+  "sinteticki_podaci": true,
+  "napomena": "SINTETIČKI PLANSKI PARAMETRI SAMO ZA DEMO. Dataset ne sadrži rokove isporuke dobavljača ni politiku sigurnosne zalihe; ove vrednosti su pretpostavke da bi se prikazao obračun količine za narudžbinu. Zamenite ih stvarnim uslovima dobavljača. Bez ovog fajla aplikacija ne predlaže količine, već navodi šta nedostaje.",
+  "rok_isporuke_dana": {
+    "Zrno Plus Distribucija d.o.o. (izmišljeno)": 2,
+    "Mlečni Dvor Promet d.o.o. (izmišljeno)": 1,
+    "Osvežavajuća Pića Trade d.o.o. (izmišljeno)": 2,
+    "Hmelj i Slad Distribucija d.o.o. (izmišljeno)": 3
+  },
+  "sigurnosna_zaliha_dana": 3,
+  "period_pregleda_dana": 7
+}

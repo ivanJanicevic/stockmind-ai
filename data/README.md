@@ -15,6 +15,7 @@ Sintetički izvoz prometa iz ESIR kase za hakaton demo. Svi podaci su izmišljen
 | `fakture/*.pdf`, `otpremnice/*.pdf` | 7 faktura i 7 otpremnica (faktura/otpremnica 02 – pekara – nije u setu); `fakture/scenariji-fakture.md` opisuje zamke |
 | `text/*.txt` | Tekstualni sloj PDF-ova (`scripts/extract-pdf-text.sh`); aplikacija čita ove fajlove |
 | `dobavljaci.json` | Matični podaci kupca i dobavljača (PIB, račun, e-mail – izmišljeno) |
+| `planiranje.json` | **Sintetički** planski parametri za demo (rok isporuke po dobavljaču, sigurnosna zaliha, period pregleda) – dataset ih ne sadrži; bez ovog fajla aplikacija ne predlaže količine za narudžbinu |
 | `schema.sql` | Predlog šeme baze (aplikacija je ne koristi) |
 
 ## Format CSV-a

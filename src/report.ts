@@ -4,6 +4,22 @@
 
 import type { ApCase, Decision, MissingDocument } from './ap.js';
 import type { Finding, Rejected, Review } from './findings.js';
+import type { ComparisonRow, LotRow, PlanningParams, ProfitRow, PromotionRow, RecommendationLine, ReplenishmentRow } from './planning.js';
+import { PLANNING_RULES } from './planning.js';
+
+export interface PlanningSection {
+  asOf: string;
+  profit: ProfitRow[];
+  comparison: ComparisonRow[];
+  monthly: { comparable: boolean; reason: string };
+  lots: LotRow[];
+  promotions: PromotionRow[];
+  replenishment: ReplenishmentRow[];
+  recommendations: RecommendationLine[];
+  excludedNotes: string[];
+  unusedItems: string[];
+  params: PlanningParams | null;
+}
 
 export const DISCLAIMER =
   'Decision support on synthetic data. Not financial advice. No payment or e-mail has been sent.';
@@ -53,6 +69,7 @@ export interface ReportInput {
   run: { models: string; tokens: string; calls: number; durationS: number; network: string };
   paymentFile: string | null;
   paymentTotal: number;
+  planning?: PlanningSection;
 }
 
 const invoiceNo = (c: ApCase) => c.invoice?.invoiceNumber.value ?? c.invoiceFile;
@@ -132,7 +149,9 @@ export function buildReport(r: ReportInput): string {
     out.push(`- ${r.reviewNote ?? 'reviewer did not run'}`);
   }
 
-  out.push('', '## 5. Agent timeline', '', 'Seconds since start. Overlapping intervals are agents working at the same time.', '', '| Agent | Role | Started | Answered | Status |', '| --- | --- | ---: | ---: | --- |');
+  if (r.planning) out.push(...planningSection(r.planning));
+
+  out.push('', '## 7. Agent timeline', '', 'Seconds since start. Overlapping intervals are agents working at the same time.', '', '| Agent | Role | Started | Answered | Status |', '| --- | --- | ---: | ---: | --- |');
   for (const t of [...r.timeline].sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))) {
     const s = (ms?: number) => (ms === undefined ? '–' : (ms / 1000).toFixed(1));
     out.push(`| ${t.agent} | ${t.role} | ${s(t.startedAt)} | ${s(t.answeredAt)} | ${t.status} |`);
@@ -140,4 +159,88 @@ export function buildReport(r: ReportInput): string {
 
   out.push('', `> ${DISCLAIMER}`, '');
   return out.join('\n');
+}
+
+const num = (n: number | null, digits = 2) =>
+  n === null ? '–' : n.toLocaleString('sr-RS', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+
+// Section 6: facts (computed from data), forecasts (projections from recent
+// demand) and recommendations (proposed actions), each with sources and limits.
+function planningSection(p: PlanningSection): string[] {
+  const out: string[] = [
+    '',
+    '## 6. Sales, profit and inventory planning',
+    '',
+    `As of ${p.asOf}, the last day in the POS export. **[FACT]** = computed from the data · **[FORECAST]** = projection from the last ${PLANNING_RULES.demandWindowDays} days' demand · **[RECOMMENDATION]** = proposed action. Full rows: \`out/recommendations.csv\`, \`out/sales-by-product.csv\` (daily, weekly, monthly).`,
+    '',
+    '### [FACT] Profit by product — total vs per unit',
+    '',
+    'Net revenue excludes VAT; cost of goods is recipe cost at the purchase price in force on each sale date.',
+    '',
+    '| Rank | Product | Units | Net revenue | Cost of goods | **Total gross profit** | Margin | Profit per unit (avg) | Profit per unit (now) |',
+    '| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+  ];
+  const show = [...p.profit.slice(0, 10), ...p.profit.slice(-3)];
+  for (const x of show) {
+    out.push(`| ${x.rank} | ${x.name} | ${num(x.units)} | ${rsd(x.netRevenue)} | ${rsd(x.costOfGoods)} | **${rsd(x.grossProfit)}** | ${num(x.marginPct)} % | ${rsd(x.avgProfitPerUnit)} | ${rsd(x.currentProfitPerUnit)} |`);
+    if (x.rank === 10 && p.profit.length > 13) out.push('| … | | | | | | | | |');
+  }
+  const missingCost = p.profit.filter((x) => x.costMissing.length);
+  if (missingCost.length) out.push('', `⚠️ Cost incomplete for: ${missingCost.map((x) => `${x.name} (${x.costMissing.join(', ')})`).join('; ')}.`);
+
+  const moving = p.comparison.filter((c) => c.flag === 'rising' || c.flag === 'falling');
+  out.push('', `### [FACT] Equivalent-period comparison — ${p.comparison[0]?.basis ?? 'not enough full weeks'}`, '');
+  out.push(`Flagged when the change is at least ±${PLANNING_RULES.trendChangePct} % and the earlier week had at least ${PLANNING_RULES.trendMinUnits} units.`, '');
+  for (const c of moving) out.push(`- ${c.flag === 'rising' ? '📈' : '📉'} ${c.name}: ${num(c.previous)} → ${num(c.latest)} units (${c.changePct! > 0 ? '+' : ''}${num(c.changePct)} %)${src(c.sources)}`);
+  if (!moving.length) out.push('- no product moved enough to flag');
+  out.push(`- Monthly comparison: ${p.monthly.comparable ? p.monthly.reason : `not possible — ${p.monthly.reason}`}.`);
+
+  const problems = p.lots.filter((l) => l.status === 'expired_on_arrival' || l.status === 'expired_unsold');
+  out.push('', '### [FACT] Expired stock by delivered lot (book estimate)', '');
+  for (const l of problems) {
+    out.push(`- ${l.item}, lot ${l.noteNo} (delivered ${l.deliveryDate}, expiry ${l.expiryDate}): ${l.status === 'expired_on_arrival' ? 'expired on arrival' : 'expired'} with ${num(l.remainingAsOf)} ${l.unit} not used by recipes — ${rsd(l.costAtRisk ?? 0)} at cost${src(l.sources.slice(0, 1))}`);
+  }
+  if (!problems.length) out.push('- none');
+
+  const atRisk = p.lots.filter((l) => l.status === 'at_risk');
+  out.push('', `### [FORECAST] Lots at risk of expiring unsold (next ${PLANNING_RULES.forecastHorizonDays} days)`, '');
+  for (const l of atRisk) {
+    out.push(`- ${l.item}, lot ${l.noteNo}: ${num(l.remainingAsOf)} ${l.unit} left, expires ${l.expiryDate} (${l.daysToExpiry} days); at ${num(l.avgDailyDemand)} ${l.unit}/day about ${num(l.projectedLeftover)} ${l.unit} will be left — ${rsd(l.costAtRisk ?? 0)} at cost${src(l.sources.slice(0, 1))}`);
+  }
+  if (!atRisk.length) out.push('- none');
+
+  out.push('', '### [RECOMMENDATION] Promotion candidates', '');
+  for (const x of p.promotions) {
+    out.push(
+      `- **${x.action}.** ${num(x.unitsAtRisk)} ${x.unit} forecast unsold (${rsd(x.costAtRisk)} at cost); clearing it needs ${num(x.requiredDailySales)} ${x.unit}/day vs ${num(x.currentDailySales)} now${x.requiredUpliftPct !== null ? ` (+${num(x.requiredUpliftPct, 0)} %)` : ''}.` +
+        (x.maxDiscountPct !== null ? ` Price excl. VAT ${rsd(x.netPricePerUnit ?? 0)}, cost ${rsd(x.costPerUnit ?? 0)}: a discount above ${num(x.maxDiscountPct)} % sells below cost.` : '') +
+        ` _${x.limitations.join(' ')}_`
+    );
+  }
+  if (!p.promotions.length) out.push('- none: no lot is forecast to expire with stock left');
+
+  out.push('', '### [RECOMMENDATION] Replenishment', '');
+  out.push(
+    p.params
+      ? `Order quantity = average daily demand × (lead time + review period ${p.params.reviewPeriodDays} d + safety stock ${p.params.safetyStockDays} d) − book stock, in whole purchase units, proposed only below the reorder point (demand × (lead time + safety)).${p.params.synthetic ? ' ⚠️ Lead times and safety stock come from `data/planiranje.json`, which is **synthetic** — replace with real supplier terms.' : ''}`
+      : '⚠️ No planning parameters (`data/planiranje.json`): no order quantities are proposed. Missing per item is listed below.',
+    '',
+    '| Item | Flag | Book stock | Demand/day | Days of cover | Order | Confidence |',
+    '| --- | --- | ---: | ---: | ---: | --- | --- |'
+  );
+  for (const x of p.replenishment.filter((r) => r.flag !== 'ok')) {
+    out.push(`| ${x.item} | ${x.flag} | ${num(x.bookStock)} ${x.unit} | ${num(x.avgDailyDemand)} | ${num(x.daysOfCover)} | ${x.orderQuantity ? `${x.orderQuantity} ${x.purchaseUnit}` : '–'} | ${x.confidence} |`);
+  }
+  out.push('', `${p.replenishment.filter((r) => r.flag === 'ok').length} other items: stock covers demand.`);
+
+  out.push('', '### Missing data and limitations', '');
+  const missing = [...new Set(p.replenishment.flatMap((r) => r.missing))];
+  out.push(
+    ...missing.map((m) => `- ${m}`),
+    '- promotion history (no discount effect on volume is estimated)',
+    `- longer sales history (only ${p.profit.length ? 'one month' : 'no'} of POS data; no seasonality)`,
+    ...p.excludedNotes.map((n) => `- delivery note left out of lot tracking (reading not verified): ${n}`),
+    ...(p.unusedItems.length ? [`- delivered items not used by any recipe (not tracked): ${p.unusedItems.join(', ')}`] : [])
+  );
+  return out;
 }
