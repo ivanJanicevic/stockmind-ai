@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx src/index.ts",
+    "agent:document": "tsx src/agents/document/run.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "build": "tsc",
@@ -20,7 +21,8 @@
   "dependencies": {
     "@jigjoy/mozaik-network": "^0.1.0",
     "@mozaik-ai/core": "6.0.0",
-    "dotenv": "^18.0.10"
+    "dotenv": "^18.0.10",
+    "unpdf": "2.2.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.11",

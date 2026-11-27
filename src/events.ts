@@ -24,6 +24,20 @@ export class WhenAnyAnswer extends SituationSpecification {
   }
 }
 
+// Any of the given event types (e.g. 'function_call.started'), from one producer only.
+export class WhenEventFrom extends SituationSpecification {
+  constructor(
+    private readonly producerId: string,
+    private readonly types: readonly string[]
+  ) {
+    super();
+  }
+
+  isSatisfiedBy({ event }: SituationContext): boolean {
+    return event.producerId === this.producerId && this.types.includes(event.type);
+  }
+}
+
 // Carries tokenUsage for each model call.
 export class WhenInferenceCompleted extends SituationSpecification {
   isSatisfiedBy({ event }: SituationContext): boolean {
