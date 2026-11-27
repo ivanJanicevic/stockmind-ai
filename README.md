@@ -37,6 +37,10 @@ Every row below is found by code from `data/`, and the tests in `test/` pin each
 | Schweppes Tonic sold beyond deliveries | 28 sold vs 24 delivered; first oversell on POS row 1905, receipt …-2193, 24.12.2026 13:41 | stock finding |
 | Karamel latte demand collapse | 39 → 27 → 22 → 7 per week (−82 %), price unchanged | sales finding |
 | Supplier price rises | espresso beans 2.450 → 3.480 (+42 %), milk, barista milk, domestic coffee | margin finding (espresso 88,75 % → 84,42 %) |
+| Profit by product | espresso earns most in total (48.701,75 RSD), draught beer most per glass (188,33 vs 143,66 RSD) | profit ranking |
+| Expired stock by lot | cream (two lots), Fanta, IVI, sparkling water expired with stock left; oat drink expired on arrival | inventory facts |
+| Stock at risk | hot-chocolate powder and alcohol-free beer forecast to expire unsold on 31.12 | promotion candidates (discount ceiling, no invented uplift) |
+| Reorder / overstock | Fanta, IVI, Schweppes, cream out of book stock; ~168 days of espresso beans | replenishment (quantities only with planning parameters) |
 | Month turns into a loss | run-rate result 30.079,68 → −16.998,72 RSD; rent, electricity, card fees and maintenance up 50.550 RSD a month | margin and cost finding |
 
 ## Architecture
@@ -60,8 +64,38 @@ Every row below is found by code from `data/`, and the tests in `test/` pin each
    every model.answer event and starts the agents that depend on it
 ```
 
+## Inventory planning
+
+Section 6 of `out/review.md`, `out/recommendations.csv` and `out/sales-by-product.csv`. Everything is computed in `src/planning.ts`, and the **Inventory Planner** agent only interprets it.
+- **Labels:** every number is marked **[FACT]** (computed from the data), **[FORECAST]** (projected from the last 14 days' demand) or **[RECOMMENDATION]** (a proposed action), with its source and limitations.
+- **Sales by product:** units and revenue per day, 7-day week and calendar month.
+  - Equivalent periods are compared: the last full week vs the week before. Products are flagged rising or falling at ±25 %, with at least 10 units in the earlier week.
+  - Months are *not* compared: the data has 5 days of November and 25 of December, and the report says so.
+- **Profit by product:**
+  - net revenue (excl. VAT), cost of goods from recipes at the purchase price on each sale date, total gross profit and margin, ranked by total profit;
+  - shown separately: average profit per unit and current profit per unit.
+- **Expiry by delivered lot:**
+  - Lots come from the **verified** delivery-note readings (quantity and expiry per line). Register deliveries without a note get *unknown* expiry, never an invented one.
+  - Demand from recipes × sales is allocated to lots earliest-expiry-first, which gives expired-unsold, expired-on-arrival and at-risk lots, with cost at risk.
+  - Stock is a **book estimate**: deliveries minus recipe use. It is never assumed to equal the delivered quantity, and there is no physical count in the data.
+- **Promotions:** only for lots forecast to expire with stock left.
+  - The row shows the units and cost at risk, the sales rate needed to clear the lot, and the maximum discount before a unit sells below cost.
+  - There is no promotion history, so **no discount's effect on sales is estimated**.
+- **Replenishment:**
+  - Per material: book stock, demand per day and days of cover. It flags stock-out risk and overstock.
+  - With planning parameters, it also gives the reorder point = demand × (lead time + safety days) and the order quantity = demand × (lead time + review + safety) − stock, in whole purchase units.
+  - The dataset has no lead times, so `data/planiranje.json` provides **clearly labelled synthetic** ones for the demo. Without that file, no quantity is proposed and the row lists what's missing.
+  - Confidence is never "high", because stock is a book estimate and there are only 30 days of history.
+
+**Still missing for real-world use:**
+- a physical stock count or opening stock;
+- real supplier lead times, minimum order quantities and a safety-stock policy;
+- promotion history, to estimate the effect of a discount;
+- more than a month of sales, for seasonality;
+- expiry dates for deliveries without a delivery note.
+
 **Where the multi-agent work happens** (`src/index.ts`):
-- **Concurrency.** All 3 analysts and all 14 clerks are started at once, rate-limited to `REQUESTS_PER_MINUTE`. Matching and claims for one invoice start as soon as its two clerks answer, while other agents are still working. The report's **agent timeline** shows the overlap.
+- **Concurrency.** All 3 analysts and all 14 clerks are started at once; the Inventory Planner starts on the event that the last delivery note is verified and runs alongside the claims writers, rate-limited to `REQUESTS_PER_MINUTE`. Matching and claims for one invoice start as soon as its two clerks answer, while other agents are still working. The report's **agent timeline** shows the overlap.
 - **Shared state.** `AppState extends RuntimeState` holds the invoice cases, analyst results, review and timeline. Every agent's result is written there, and the report is built from it.
 - **Coordination through events.** The Monitoring participant handles Mozaik `model.answer` events. Two clerk answers for a pair trigger the three-way match; a hold triggers that invoice's Claims Writer; all specialists done triggers the Reviewer. `inference.completed` events are summed into token usage.
 - **Checks between agents.**
@@ -83,6 +117,7 @@ Every row below is found by code from `data/`, and the tests in `test/` pin each
 | `src/documents.ts` | Invoice and delivery-note answers: parsing and verification against the text |
 | `src/ap.ts` | Three-way match, payment decision, missing documents |
 | `src/analytics.ts` | Stock check, weekly trend, price rises, margins, period result |
+| `src/planning.ts` | Sales and profit by product, lots and expiry risk, promotion candidates, replenishment, recommendation CSVs |
 | `src/findings.ts` | Guards for analyst findings and the review |
 | `src/payments.ts`, `src/report.ts` | Payment draft CSV and `out/review.md` |
 | `src/dashboard.ts` | Optional live dashboard (`npm run demo`), no dependencies |
@@ -101,9 +136,9 @@ cp .env.example .env   # then set GEMINI_API_KEY
 npm run dev
 ```
 
-- **Run time and cost:** about 23 model calls, roughly 2.5 minutes at the default 10 calls per minute. Set `REQUESTS_PER_MINUTE=14` on Flash Lite to make it faster.
-- **Output:** `out/review.md` and `out/payment-draft.csv`.
-- **Live dashboard:** `npm run demo` runs the same desk and serves http://localhost:3000 (`DASHBOARD_PORT` to change it). Every agent loop appears as a bar on a timeline, so you can see them overlap, and the invoices update as they are matched. The page stays open after the run; press Ctrl+C to exit. It's optional: if the port is taken, the run continues without it.
+- **Run time and cost:** about 24 model calls, roughly 2.5 minutes at the default 10 calls per minute. Set `REQUESTS_PER_MINUTE=14` on Flash Lite to make it faster.
+- **Output:** `out/review.md`, `out/payment-draft.csv`, `out/recommendations.csv` and `out/sales-by-product.csv`.
+- **Live dashboard:** `npm run demo` runs the same desk and serves http://127.0.0.1:3000 (`DASHBOARD_PORT` to change it). Every agent loop appears as a bar on a timeline, so you can see them overlap, and the invoices update as they are matched. The page stays open after the run; press Ctrl+C to exit. It's optional: if the port is taken, the run continues without it.
 - **Human approval:** to approve the invoice above the limit as the human approver, run `npm run dev -- --approve F-ZP-2026-01184`. It is then added to the payment draft as "Approved by human". Approving a held invoice has no effect.
 
 End of a run: the invoice decisions are deterministic, while finding counts depend on the model:
@@ -175,7 +210,7 @@ npm run typecheck
 
 ```bash
 npm run dev        # Run the desk (calls the model)
-npm run demo       # Same, with the live dashboard on http://localhost:3000
+npm run demo       # Same, with the live dashboard on http://127.0.0.1:3000
 npm test           # Unit tests, no API calls
 npm run typecheck  # Type-check
 npm run build      # Compile to dist/
