@@ -105,11 +105,19 @@ export function matchInvoice(c: ApCase, purchases: Purchase[], master: Master): 
     supplier ? `invoice account ${inv.supplierAccount.value}, master ${supplier.racun}` : `invoice account ${inv.supplierAccount.value}, no master record`,
     [invSrc, FILES.suppliers]
   );
-  add('same_supplier', note.supplierPib.value === inv.supplierPib.value, `invoice PIB ${inv.supplierPib.value}, delivery note PIB ${note.supplierPib.value}`, [invSrc, noteSrc]);
+  add('same_supplier', compact(note.supplierPib.value) === compact(inv.supplierPib.value), `invoice PIB ${inv.supplierPib.value}, delivery note PIB ${note.supplierPib.value}`, [invSrc, noteSrc]);
   add('note_reference', compact(inv.deliveryNote.value) === compact(note.noteNumber.value), `invoice refers to ${inv.deliveryNote.value}, delivery note is ${note.noteNumber.value}`, [invSrc, noteSrc]);
 
-  const register = purchases.filter((p) => p.invoiceNo === inv.invoiceNumber.value);
+  const register = purchases.filter((p) => compact(p.invoiceNo) === compact(inv.invoiceNumber.value));
   add('in_purchase_register', register.length > 0, register.length ? `${register.length} agreed lines for ${inv.invoiceNumber.value}` : `${inv.invoiceNumber.value} not in the purchase register`, [FILES.purchases]);
+
+  // Dates are cross-checked, not just found somewhere in the document: the
+  // delivery date must be the register's receipt date (it drives the expiry
+  // check) and the due date can't be before the issue date.
+  if (register[0]) {
+    add('delivery_date', note.deliveryDate.value === register[0].date, `delivery note dated ${note.deliveryDate.value}, received ${register[0].date} in the purchase register`, [noteSrc, ref(FILES.purchases, register[0].line)]);
+  }
+  add('due_date', inv.dueDate.value >= inv.issueDate.value, `issued ${inv.issueDate.value}, due ${inv.dueDate.value}`, [invSrc]);
 
   for (const line of inv.lines) {
     const delivered = note.lines.find((n) => n.code === line.code);
@@ -139,6 +147,10 @@ export function matchInvoice(c: ApCase, purchases: Purchase[], master: Master): 
         lineRef,
         withVat((line.unitPrice - agreed.price) * line.quantity, line.vatRate)
       );
+    }
+
+    if (agreed && agreed.vatRate !== line.vatRate) {
+      add(`vat_rate ${line.code}`, false, `${label}: invoiced VAT ${line.vatRate}%, register ${agreed.vatRate}%`, lineRef);
     }
 
     const expected = withVat(line.quantity * line.unitPrice, line.vatRate);

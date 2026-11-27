@@ -41,7 +41,10 @@ export const isString = (x: unknown): x is string =>
 export const isNumber = (x: unknown): x is number =>
   typeof x === 'number' && Number.isFinite(x);
 
-const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+// Whitespace, dashes and quote marks are normalised so a model writing "-"
+// for "–" or plain quotes for „“ still matches the document.
+export const squash = (s: string) =>
+  s.normalize('NFC').replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[„“”]/g, '"').replace(/\s+/g, ' ').trim();
 export const compact = (s: string) => s.replace(/\s+/g, '').toUpperCase();
 
 export function quoteInSource(quote: string, source: string): boolean {
@@ -87,14 +90,19 @@ export function parseVerification(answer: string): Parsed<Verification> {
 export function unsourcedFigures(text: string, allowed: string): string[] {
   const figure = /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,4})?\b|\d[\d.,]*\d|\d/g;
   const isMoney = (token: string) => /[.,]\d{2}$/.test(token);
-  const allowedCompact = compact(allowed);
+  const isGrouped = (token: string) => /^\d{1,3}([.,]\d{3})+$/.test(token); // "14.250", "14,250"
+  const allowedFigures = allowed.match(figure) ?? [];
+  // Whole tokens only: "4.680,00" must not pass because "64.680,00" is printed.
+  const allowedTokens = new Set(allowedFigures.map(compact));
   // Only amounts written with cents count as money, so "EUR 600,00" can't be
   // excused by a quantity like "Croissants (600)".
-  const allowedMoney = (allowed.match(figure) ?? []).filter(isMoney).flatMap(amountsIn);
+  const allowedMoney = allowedFigures.filter(isMoney).flatMap(amountsIn);
+  const allowedWhole = new Set(allowedFigures.map((t) => t.replace(/[.,]/g, '')));
 
   return (text.match(figure) ?? []).filter((token) => {
     if ((token.match(/\d/g) ?? []).length < 3) return false; // "5 days", "2 boxes"
-    if (allowedCompact.includes(compact(token))) return false;
+    if (allowedTokens.has(compact(token))) return false;
+    if (isGrouped(token)) return !allowedWhole.has(token.replace(/[.,]/g, '')) && !allowedMoney.some((b) => sameAmount(b, Number(token.replace(/[.,]/g, ''))));
     if (!isMoney(token)) return true;
     return !amountsIn(token).every((a) => allowedMoney.some((b) => sameAmount(a, b)));
   });

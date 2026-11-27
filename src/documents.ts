@@ -11,6 +11,7 @@ import {
   isString,
   quoteInSource,
   sourced,
+  squash,
   type Parsed,
   type Sourced,
 } from './parsing.js';
@@ -152,8 +153,12 @@ function checkDate(problems: string[], name: string, s: Sourced<string>, text: s
   if (!quoteInSource(s.quote, text)) problems.push(`${name}: quote "${s.quote}" not found in document`);
   else if (!dateInQuote(s.value, s.quote)) problems.push(`${name}: date ${s.value} does not match quote "${s.quote}"`);
 }
+// A line quote must be one whole printed row: a shortened quote could hide a
+// column (e.g. the expiry date), a longer one could borrow the next row's values.
+const isWholeLine = (quote: string, text: string) => text.split('\n').some((line) => squash(line) === squash(quote));
+
 function checkLine(problems: string[], name: string, quote: string, text: string, code: string, values: { n: number; money: boolean }[]): void {
-  if (!quoteInSource(quote, text)) return void problems.push(`${name}: quote "${quote}" not found in document`);
+  if (!isWholeLine(quote, text)) return void problems.push(`${name}: quote "${quote}" is not a whole row of the document`);
   if (!compact(quote).includes(compact(code))) return void problems.push(`${name}: code ${code} not in quote "${quote}"`);
   const tokens = tokensOf(quote);
   const missing = values.filter(({ n, money }) => !tokens.has(printedAs(n, money))).map(({ n }) => n);
@@ -172,14 +177,18 @@ export function verifyInvoice(doc: InvoiceDoc, text: string): string[] {
   checkDate(problems, 'dueDate', doc.dueDate, text);
   if (!quoteInSource(doc.totalAmount.quote, text)) problems.push(`totalAmount: quote "${doc.totalAmount.quote}" not found in document`);
   else if (!has(numbersIn(doc.totalAmount.quote), doc.totalAmount.value)) problems.push(`totalAmount: ${doc.totalAmount.value} not printed in "${doc.totalAmount.quote}"`);
-  doc.lines.forEach((l, i) =>
+  doc.lines.forEach((l, i) => {
+    // Quantity must be the column before the unit ("96 kom"), not any number in the row.
+    if (!compact(l.quote).includes(compact(`${printedAs(l.quantity, false)} ${l.unit}`))) {
+      problems.push(`lines[${i}] ${l.code}: quantity ${l.quantity} ${l.unit} not printed as such in "${l.quote}"`);
+    }
     checkLine(problems, `lines[${i}] ${l.code}`, l.quote, text, l.code, [
       { n: l.quantity, money: false },
       { n: l.unitPrice, money: true },
       { n: l.vatRate, money: false },
       { n: l.lineTotal, money: true },
-    ])
-  );
+    ]);
+  });
   return problems;
 }
 
@@ -190,7 +199,12 @@ export function verifyNote(doc: NoteDoc, text: string): string[] {
   checkDate(problems, 'deliveryDate', doc.deliveryDate, text);
   doc.lines.forEach((l, i) => {
     checkLine(problems, `lines[${i}] ${l.code}`, l.quote, text, l.code, [{ n: l.quantity, money: false }]);
+    // Delivery notes print unit then quantity ("kom 120").
+    if (!compact(l.quote).includes(compact(`${l.unit} ${printedAs(l.quantity, false)}`))) {
+      problems.push(`lines[${i}] ${l.code}: quantity ${l.quantity} ${l.unit} not printed as such in "${l.quote}"`);
+    }
     if (l.expiryDate && !dateInQuote(l.expiryDate, l.quote)) problems.push(`lines[${i}] ${l.code}: expiry ${l.expiryDate} not in "${l.quote}"`);
+    if (!l.expiryDate && /\d{2}\.\d{2}\.\d{4}/.test(l.quote)) problems.push(`lines[${i}] ${l.code}: expiry date printed in "${l.quote}" but not returned`);
   });
   return problems;
 }

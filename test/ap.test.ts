@@ -65,6 +65,15 @@ test('a wrong bank account or unknown supplier holds the invoice', () => {
   assert.ok(failed({ ...c, checks: matchInvoice(c, purchases, master) }).some(([name]) => name === 'bank_account'));
 });
 
+test('review fixes: wrong delivery date or due date holds the invoice', () => {
+  const c = runDesk().get('F-MD-2026-55271')!;
+  c.note = { ...c.note!, deliveryDate: { value: '2026-11-20', quote: '20.11.2026' } };
+  assert.ok(failed({ ...c, checks: matchInvoice(c, purchases, master) }).some(([name]) => name === 'delivery_date'));
+  const d = runDesk().get('F-MD-2026-55302')!;
+  d.invoice = { ...d.invoice!, dueDate: { value: '2026-11-01', quote: '01.11.2026' } };
+  assert.ok(failed({ ...d, checks: matchInvoice(d, purchases, master) }).some(([name]) => name === 'due_date'));
+});
+
 test('register invoices without a document are reported, not paid', () => {
   const cases = [...runDesk().values()];
   assert.deepEqual(

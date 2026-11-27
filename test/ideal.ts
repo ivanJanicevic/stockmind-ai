@@ -59,6 +59,7 @@ export function idealNote(text: string): NoteDoc {
     .split('\n')
     .map((l) => /^(\d+) ([A-Z]{2,4}-\S+) (.+?) (kom|kut|pak|l|kg) ([\d,]+)(?: (\d{2}\.\d{2}\.\d{4}))?/.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ ...m, 0: m.input.trim() }) as unknown as RegExpExecArray) // quote = the whole printed row
     .map((m) => ({
       code: m[2]!,
       name: m[3]!,

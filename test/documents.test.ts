@@ -59,3 +59,27 @@ test('altered or invented values are rejected', () => {
   const wrongPib = { ...doc, supplierPib: { value: '100000099', quote: 'PIB: 100000050' } };
   assert.match(verifyInvoice(wrongPib, text).join(), /supplierPib/);
 });
+
+test('review fixes: shortened, merged or column-shifted quotes are rejected', () => {
+  const text = readDoc('otpremnica-03-zamka-kolicina-rok.txt');
+  const doc = idealNote(text);
+  // Hiding the expiry column by shortening the quote (would let expired goods through).
+  const hidden = { ...doc, lines: doc.lines.map((l, i) => (i === 1 ? { ...l, expiryDate: '', quote: '2 MD-MB-1000 Biljni napitak ovas 1 l kom 12' } : l)) };
+  assert.match(verifyNote(hidden, text).join(), /not a whole row/);
+  // Full row but expiry left empty.
+  const empty = { ...doc, lines: doc.lines.map((l, i) => (i === 1 ? { ...l, expiryDate: '' } : l)) };
+  assert.match(verifyNote(empty, text).join(), /expiry date printed .* but not returned/);
+
+  const beer = readDoc('otpremnica-08-pivo.txt');
+  const beerDoc = idealNote(beer);
+  // "6 gajbi x 20" in the note column: quantity must be the "kom 120" column.
+  const shifted = { ...beerDoc, lines: beerDoc.lines.map((l, i) => (i === 0 ? { ...l, quantity: 20 } : l)) };
+  assert.match(verifyNote(shifted, beer).join(), /quantity 20 kom not printed as such/);
+});
+
+test('review fixes: a plain hyphen for an en dash still matches', () => {
+  const text = readDoc('faktura-08-pivo.txt');
+  const doc = idealInvoice(text);
+  const hyphen = { ...doc, lines: doc.lines.map((l) => ({ ...l, quote: l.quote.replace('–', '-') })) };
+  assert.deepEqual(verifyInvoice(hyphen, text), []);
+});

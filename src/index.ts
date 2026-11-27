@@ -170,6 +170,7 @@ const callTimes: number[] = [];
 let pumpTimer: NodeJS.Timeout | undefined;
 
 function pumpQueue(): void {
+  if (retryScheduled) return; // hold new calls while a retry is waiting
   const now = Date.now();
   while (callTimes.length && now - callTimes[0]! >= 60_000) callTimes.shift();
   while (callQueue.length && callTimes.length < config.requestsPerMinute) {
@@ -332,6 +333,50 @@ function handleReview(answer: string): void {
   state.reviewDone = true;
 }
 
+// Routes an agent's answer (or '' when it produced none) to its handler. A bug
+// in a handler is recorded on that item instead of losing the answer.
+function dispatch(info: AgentInfo, answer: string): void {
+  try {
+    if (info.role === 'invoice') handleInvoice(caseOf(info.caseId!), answer);
+    else if (info.role === 'note') handleNote(caseOf(info.caseId!), answer);
+    else if (info.role === 'claims') handleClaim(caseOf(info.caseId!), answer);
+    else if (info.role === 'analyst') handleAnalysis(info.analyst!, answer);
+    else handleReview(answer);
+  } catch (error) {
+    const reason = `internal error handling ${info.name}: ${(error as Error).message}`;
+    if (info.caseId) {
+      const c = caseOf(info.caseId);
+      c.errors.push(reason);
+      c.done = true;
+    } else if (info.analyst) {
+      const a = state.analyses.find((x) => x.key === info.analyst)!;
+      a.error = reason;
+      a.done = true;
+    } else {
+      state.reviewNote = reason;
+      state.reviewDone = true;
+    }
+  }
+  maybeStartReviewer();
+  finishIfDone();
+}
+
+// A loop can finish without a model.answer (safety block, empty output). If
+// no answer follows an agent's inference.completed, treat it as no answer.
+const NO_ANSWER_GRACE_MS = 15_000;
+function expectAnswer(producerId: string): void {
+  setTimeout(() => {
+    const info = agents.get(producerId);
+    if (!info || answered.has(producerId) || finished) return;
+    answered.add(producerId);
+    pendingLoops.delete(producerId);
+    const entry = state.timeline.get(producerId);
+    if (entry) entry.status = 'no answer';
+    console.warn(`${stamp()} [${info.name}] finished without an answer`);
+    dispatch(info, '');
+  }, NO_ANSWER_GRACE_MS).unref();
+}
+
 const monitor = createHuman({
   name: 'Monitoring',
   capabilities: [],
@@ -351,15 +396,8 @@ const monitor = createHuman({
           }
           console.log(`${stamp()} [${info.name}] answered`);
 
-          const answer = answerText(event.payload);
-          if (info.role === 'invoice') handleInvoice(caseOf(info.caseId!), answer);
-          else if (info.role === 'note') handleNote(caseOf(info.caseId!), answer);
-          else if (info.role === 'claims') handleClaim(caseOf(info.caseId!), answer);
-          else if (info.role === 'analyst') handleAnalysis(info.analyst!, answer);
-          else handleReview(answer);
-
-          maybeStartReviewer();
-          finishIfDone();
+          sameModelRetries = 0; // the model is answering again
+          dispatch(info, answerText(event.payload));
         },
       },
     },
@@ -367,6 +405,7 @@ const monitor = createHuman({
       specification: new WhenInferenceCompleted(),
       processor: {
         apply({ event }) {
+          if (agents.has(event.producerId)) expectAnswer(event.producerId);
           const usage = (event.payload as { tokenUsage?: { inputTokens?: number; outputTokens?: number } } | null)?.tokenUsage;
           tokens.input += usage?.inputTokens ?? 0;
           tokens.output += usage?.outputTokens ?? 0;
@@ -400,7 +439,8 @@ function finish(exitCode: number): void {
       const inv = c.invoice!;
       return {
         status: decisions.get(c.id) as 'ready' | 'approved',
-        recipient: inv.supplierName.value,
+        // Payee from the supplier master, never from how the document names it.
+        recipient: findSupplier(master, inv.supplierPib.value)?.naziv ?? inv.supplierName.value,
         recipientAccount: inv.supplierAccount.value,
         amount: inv.totalAmount.value,
         reference: inv.invoiceNumber.value,
@@ -531,7 +571,7 @@ function handleModelError(error: unknown): void {
     console.warn(`[network] ${networkStatus}`);
     return;
   }
-  if (finished) return fail('unexpected error', error);
+  if (finished || allDone()) return; // a late duplicate after everything answered
   if (retryScheduled) return; // parallel loops usually fail together
 
   const status = (error as { status?: number } | null)?.status;
@@ -539,17 +579,20 @@ function handleModelError(error: unknown): void {
 
   let delayMs: number;
   let action: string;
-  if ((status === undefined || status === 400) && useStructuredOutput) {
+  const message = String((error as { message?: string } | null)?.message ?? error);
+  if (useStructuredOutput && (status === undefined || status === 400) && /schema|structured|response_?format|json/i.test(message)) {
+    // The model or provider rejected the JSON Schema: continue without it.
     useStructuredOutput = false;
     delayMs = 500;
     action = 'without structured output';
-  } else if (status === undefined || !RETRYABLE.has(status)) {
+  } else if (status !== undefined && !RETRYABLE.has(status)) {
     return abort(describeError(error));
   } else if (status === 429 && isShortRateLimit(error) && sameModelRetries < MAX_RATE_LIMIT_RETRIES) {
     sameModelRetries++;
     delayMs = rateLimitInfo(error).retryAfterMs ?? 30_000;
     action = `on ${currentModel()} (rate limit)`;
   } else if (status !== 429 && sameModelRetries < MAX_SAME_MODEL_RETRIES) {
+    // 503/500, or an error without HTTP status (e.g. "fetch failed"): back off.
     sameModelRetries++;
     delayMs = 2000 * 2 ** sameModelRetries;
     action = `on ${currentModel()}`;
@@ -568,6 +611,7 @@ function handleModelError(error: unknown): void {
     retryScheduled = false;
     callQueue.length = 0; // queued calls are pending too and get re-run below
     for (const loop of [...pendingLoops.values()]) run(loop.agent, loop.message, loop.output);
+    pumpQueue();
   }, delayMs);
 }
 

@@ -44,3 +44,11 @@ test('unsourcedFigures does not excuse an amount by a matching quantity', () => 
   // note 03 has "kom 12" and "kom 24" but no money amounts
   assert.deepEqual(unsourcedFigures('Vratićemo 12 komada, odobrenje 12,00 RSD.', note03), ['12,00']);
 });
+
+test('review fixes: figures match whole tokens, grouped whole numbers are accepted', () => {
+  const invoice05 = readDoc('faktura-05-kafa.txt');
+  assert.deepEqual(unsourcedFigures('Odobrenje 4.680,00 RSD.', invoice05), ['4.680,00']); // "64.680,00" is printed
+  assert.deepEqual(unsourcedFigures('Iznos 64.680,00 RSD.', invoice05), []);
+  assert.deepEqual(unsourcedFigures('Rent up 14,250 RSD (14.250).', '{"delta":14250}'), []);
+  assert.deepEqual(unsourcedFigures('Rent up 15,250 RSD.', '{"delta":14250}'), ['15,250']);
+});
