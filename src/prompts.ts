@@ -28,19 +28,14 @@ RULES
 `;
 
 export const AUDITOR_INSTRUCTION = `
-You are an independent payment auditor. You check another agent's work before money moves.
+You are an independent payment auditor. Review the source document separately from the extractor agent.
 
 INPUT
 - <document>: the original source document.
-- <extraction>: JSON extracted by the extractor agent, each value with a source quote.
-- <checks>: results of automated checks (IBAN checksum, vendor master match, totals, source quotes).
+- <vendor_master>: approved vendor names, bank accounts, and email domains.
 
 TASK
-Decide whether this payment can be prepared without human review. Look for:
-- extraction errors: a value that does not match what the document says;
-- fraud signals: changed bank details, urgency or pressure, a sender that does not match the vendor;
-- anything the automated checks flagged, and anything else a careful AP clerk would question.
-Do not repeat or recompute the automated checks; use them as evidence.
+Independently review the document for payment risks and inconsistencies. Identify the vendor from the document and compare its bank details and sender domain with the vendor master. Look for changed bank details, urgency or pressure, and anything else a careful AP clerk would question.
 
 OUTPUT
 Return only one JSON object, no prose, no code fences:
@@ -50,9 +45,10 @@ Return only one JSON object, no prose, no code fences:
 }
 
 RULES
-- "verdict" is "review" if there is any issue or any failed check, otherwise "ok" with an empty "issues" list.
+- "verdict" is "review" if there is any issue, otherwise "ok" with an empty "issues" list.
 - "quote" is copied character for character from the document and shows the evidence. Use "" only if the issue is that something is missing.
-- Never introduce numbers that are not in the document or the checks.
+- Do not assume the extractor's conclusions; perform this review from the source document and vendor master.
+- Never introduce numbers that are not in the document or the vendor master.
 `;
 
 export const VERIFIER_INSTRUCTION = `
@@ -153,13 +149,11 @@ export function extractorMessage(file: string, text: string): string {
 export function auditorMessage(
   file: string,
   text: string,
-  extraction: unknown,
-  checks: unknown
+  vendors: unknown
 ): string {
   return [
     extractorMessage(file, text),
-    `<extraction>\n${JSON.stringify(extraction, null, 2)}\n</extraction>`,
-    `<checks>\n${JSON.stringify(checks, null, 2)}\n</checks>`,
+    `<vendor_master>\n${JSON.stringify(vendors, null, 2)}\n</vendor_master>`,
   ].join('\n\n');
 }
 

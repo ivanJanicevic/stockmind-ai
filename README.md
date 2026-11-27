@@ -11,15 +11,14 @@ Accounts payable teams receive invoices and emails in every format. Someone rety
 
 ## What it does
 
-1. Six synthetic documents (invoices and emails) go to six **Extractor agents in parallel**.
-2. **Deterministic checks** test each extraction against the source document and the vendor master.
-3. An **Auditor agent** per document independently reviews the extraction, the check results and any fraud signals.
-4. If the bank details look wrong or fraudulent, a **Verifier agent** reacts to the Auditor's answer. It drafts a call-back request to the vendor's contact **on file**, never to whoever sent the document.
-5. A **payment policy** decides each document:
+1. Six synthetic documents (invoices and emails) each start an **Extractor and an independent Auditor concurrently**. All twelve analysis loops are launched without waiting for another agent's answer.
+2. **Deterministic checks** test each extraction against the source document and vendor master, while the Auditor independently reviews the document and vendor master for fraud signals. Their results are combined in shared runtime state.
+3. If bank details look wrong or fraudulent, a **Verifier agent** starts after the parallel analysis is complete. It drafts a call-back request to the vendor's contact **on file**, never to whoever sent the document.
+4. A **payment policy** decides each document:
    - **Ready**: all checks pass and the Auditor approves. Included in the SEPA draft.
    - **Needs human approval**: clean, but above the agent's spending limit (`APPROVAL_LIMIT_EUR`). A human releases it with `--approve`.
    - **Blocked**: any failed check, Auditor concern, or agent error. Blocked payments can't be approved past.
-6. Output:
+5. Output:
    - `out/sepa-draft.xml`: an ISO 20022 `pain.001.001.09` credit transfer draft for the released payments.
    - `out/review.md`: the decision for each document, every value with its source quote, all checks, Auditor issues and verification drafts.
 
@@ -38,14 +37,20 @@ The sample batch is built to exercise every control:
 
 ```text
                        shared Mozaik RuntimeState: one case per document
-                ┌─────────────────────────────────────────────────────────────────────┐
- document 1 ──> Extractor 1 ─> source + vendor checks ─> Auditor 1 ─(bank issue?)─> Verifier 1 ─┐
- document 2 ──> Extractor 2 ─> source + vendor checks ─> Auditor 2 ─────────────────────────────┤
-    ...              all documents in parallel, rate-limited model calls                      ├─> duplicate check ─> payment policy ─┬─> SEPA draft
- document 6 ──> Extractor 6 ─> source + vendor checks ─> Auditor 6 ─────────────────────────────┘        (+ human --approve)        └─> review report
+          ┌──────────────────────────────────────────────────────────────────┐
+ document 1 ──┬─> Extractor 1 ─> source + vendor checks ────────────────┐   │
+              └─> Auditor 1 ───> independent source/vendor review ──────┤   │
+ document 2 ──┬─> Extractor 2 ─> source + vendor checks ────────────────┤   │
+              └─> Auditor 2 ───> independent source/vendor review ──────┤   │
+    ...          all Extractor and Auditor loops launch in parallel      ├───┴─> combine results
+ document 6 ──┬─> Extractor 6 ─> source + vendor checks ────────────────┤          │
+              └─> Auditor 6 ───> independent source/vendor review ──────┘          ├─ bank issue? ─> Verifier
+                                                                               └─> duplicate check ─> policy
+                                                                                     ├─> SEPA draft
+                                                                                     └─> review report
 ```
 
-- **Agents react to each other through Mozaik events.** Each Auditor is triggered by its own Extractor's `model.answer`, and each Verifier by its own Auditor's. No agent reacts to its own output or to unrelated agents, so they can't loop.
+- **Genuine parallel work:** each document's Extractor and Auditor are launched together. The Auditor independently reviews the source document and vendor master; deterministic checks validate the Extractor's result. The monitor combines both answers in the shared case state. The Verifier runs only when those results show that bank details need confirmation.
 - **Structured output:** Extractor, Auditor and Verifier answers are constrained by JSON Schemas through Mozaik's `structuredOutput`. If a model rejects a schema, the run retries without it and relies on the prompt contract and a tolerant parser.
 - **Every number has a source** (`src/parsing.ts`):
   - Extracted values whose quote isn't in the document, or doesn't match the value, are rejected.
@@ -60,6 +65,7 @@ The sample batch is built to exercise every control:
   - Gemini 429/503 errors are retried or moved to `FALLBACK_MODELS`;
   - if everything fails, a partial report is still written.
 - **Usage:** token counts from `inference.completed` events are summed and shown in the console and the report.
+- **Mozaik Network (optional):** set `MOZAIK_INVITE` to a quoted hosted Network invite link to join one peer per Extractor, Auditor and Verifier. Quote the value because the link contains `#`. This makes the agents visible as Network participants; it does not send invoice data or agent outputs to the Network.
 
 | File | Role |
 | --- | --- |
@@ -106,6 +112,7 @@ INV-1004 is then included in the SEPA draft as "Approved by human". Trying `--ap
 | `REQUESTS_PER_MINUTE` | no | `10` | Client-side rate limit for model calls. Use `5` with `gemini-3.5-flash` on the free tier |
 | `RUN_TIMEOUT_MS` | no | `600000` | Stop and write a partial report after this time |
 | `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
+| `MOZAIK_INVITE` | no | – | Quoted hosted Mozaik Network invite link; joins each agent as a peer |
 
 ## Troubleshooting
 

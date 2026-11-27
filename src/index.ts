@@ -9,12 +9,14 @@ import {
   createHuman,
   type Agent,
 } from '@mozaik-ai/core';
+import { join as joinNetwork } from '@jigjoy/mozaik-network';
+import { HOSTED_NETWORK, readInviteLink } from '@jigjoy/mozaik-network/invite-link';
+import { NetworkClient } from '@jigjoy/mozaik-network/network-client';
 
 import { loadConfig, parseApprovals, type Config } from './config.js';
 import { invoices } from './data/invoices.js';
 import { debtor, vendors } from './data/vendors.js';
 import {
-  WhenAnswerFrom,
   WhenAnyAnswer,
   WhenInferenceCompleted,
   answerText,
@@ -23,6 +25,7 @@ import {
   parseAudit,
   parseExtraction,
   parseVerification,
+  quoteInSource,
   unsourcedFigures,
 } from './parsing.js';
 import {
@@ -94,11 +97,12 @@ interface OutputFormat {
   name: string;
   schema: Record<string, unknown>;
 }
+const names = new Map<string, string>();
 
 // The agent loop each unfinished case is waiting on, so it can be retried.
 const pendingLoops = new Map<
-  InvoiceCase,
-  { agent: Agent; message: string; output: OutputFormat }
+  string,
+  { c: InvoiceCase; agent: Agent; message: string; output: OutputFormat }
 >();
 let modelIndex = 0;
 const currentModel = () => config.models[modelIndex] ?? config.models[0]!;
@@ -133,8 +137,9 @@ function pumpQueue(): void {
 // runLoop is fire-and-forget; provider errors usually surface as unhandled
 // rejections (see handleModelError), but catch direct failures too.
 function run(agent: Agent, c: InvoiceCase, message: string, output: OutputFormat): void {
-  pendingLoops.set(c, { agent, message, output });
+  pendingLoops.set(agent.getId(), { c, agent, message, output });
   callQueue.push(() => {
+    console.log(`[${names.get(agent.getId()) ?? agent.getId()}] started`);
     Promise.resolve()
       .then(() =>
         runLoop(agent.getId(), message, {
@@ -158,17 +163,20 @@ const VERIFY_OUTPUT: OutputFormat = { name: 'vendor_verification', schema: VERIF
 // An answer settles the pending loop only if it came from the agent that
 // loop belongs to (another handler may already have started the next one).
 function settle(c: InvoiceCase, producerId: string): void {
-  if (pendingLoops.get(c)?.agent.getId() === producerId) pendingLoops.delete(c);
+  if (pendingLoops.get(producerId)?.c === c) pendingLoops.delete(producerId);
 }
 
-// Per document: an Extractor, then an Auditor that checks the Extractor, then
-// (only when bank details look wrong) a Verifier that reacts to the Auditor.
-// Each agent only reacts to its own predecessor, so agents can't loop.
-const names = new Map<string, string>();
+// Extractor and Auditor work independently on each document. The Verifier
+// starts only after both results are available and a bank-detail check failed.
+const extractorCase = new Map<string, InvoiceCase>();
 const auditorCase = new Map<string, InvoiceCase>();
 const verifierCase = new Map<string, InvoiceCase>();
+const verifierAgent = new Map<InvoiceCase, Agent>();
+const analyses: { extractor: Agent; auditor: Agent; c: InvoiceCase }[] = [];
+const extractionAnswered = new Set<InvoiceCase>();
 const auditAnswered = new Set<InvoiceCase>();
-const extractors: { agent: Agent; c: InvoiceCase }[] = [];
+const verificationStarted = new Set<InvoiceCase>();
+const networkAgents: string[] = [];
 
 for (const c of state.cases) {
   const extractor = createAgent({
@@ -178,84 +186,34 @@ for (const c of state.cases) {
     tools: [],
     handlers: [],
   });
+  networkAgents.push(`Extractor ${c.doc.id}`);
 
-  let audited = false;
   const auditor = createAgent({
     name: `Auditor ${c.doc.id}`,
     capabilities: ['inference'],
     instruction: AUDITOR_INSTRUCTION,
     tools: [],
-    handlers: [
-      {
-        specification: new WhenAnswerFrom(extractor.getId()),
-        processor: {
-          apply({ event }) {
-            if (audited) return;
-            audited = true;
-            settle(c, event.producerId);
-
-            const answer = answerText(event.payload);
-            const parsed = parseExtraction(answer);
-            if (!parsed.ok) {
-              c.errors.push(`extractor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
-              c.done = true;
-              finishIfDone();
-              return;
-            }
-
-            c.extraction = parsed.value;
-            c.checks = caseChecks(c.doc, parsed.value, vendors);
-            run(
-              auditor,
-              c,
-              auditorMessage(c.doc.file, c.doc.text, c.extraction, c.checks),
-              AUDIT_OUTPUT
-            );
-          },
-        },
-      },
-    ],
+    handlers: [],
   });
+  networkAgents.push(`Auditor ${c.doc.id}`);
 
-  let verifying = false;
   const verifier = createAgent({
     name: `Verifier ${c.doc.id}`,
     capabilities: ['inference'],
     instruction: VERIFIER_INSTRUCTION,
     tools: [],
-    handlers: [
-      {
-        specification: new WhenAnswerFrom(auditor.getId()),
-        processor: {
-          apply({ event }) {
-            const vendor = needsVerification(c, vendors);
-            if (verifying || !vendor) return;
-            verifying = true;
-
-            const audit = parseAudit(answerText(event.payload));
-            const findings = {
-              failedChecks: c.checks.filter((check) => !check.ok),
-              auditorIssues: audit.ok ? audit.value.issues : [],
-            };
-            const { name, iban, contactEmail, phone } = vendor;
-            run(
-              verifier,
-              c,
-              verifierMessage(c.doc.file, c.doc.text, { name, iban, contactEmail, phone }, findings),
-              VERIFY_OUTPUT
-            );
-          },
-        },
-      },
-    ],
+    handlers: [],
   });
+  networkAgents.push(`Verifier ${c.doc.id}`);
 
   names.set(extractor.getId(), `Extractor ${c.doc.id}`);
   names.set(auditor.getId(), `Auditor ${c.doc.id}`);
   names.set(verifier.getId(), `Verifier ${c.doc.id}`);
+  extractorCase.set(extractor.getId(), c);
   auditorCase.set(auditor.getId(), c);
   verifierCase.set(verifier.getId(), c);
-  extractors.push({ agent: extractor, c });
+  verifierAgent.set(c, verifier);
+  analyses.push({ extractor, auditor, c });
   join(extractor);
   join(auditor);
   join(verifier);
@@ -279,7 +237,40 @@ function recordVerification(c: InvoiceCase, answer: string): void {
   c.verification = { ...parsed.value, to: vendor.contactEmail, phone: vendor.phone };
 }
 
-// Logs every answer and records the auditor verdicts.
+function completeAnalysisIfReady(c: InvoiceCase): void {
+  if (c.done || !extractionAnswered.has(c) || !auditAnswered.has(c)) return;
+
+  const vendor = needsVerification(c, vendors);
+  if (vendor) {
+    if (verificationStarted.has(c)) return;
+    verificationStarted.add(c);
+
+    const verifier = verifierAgent.get(c);
+    if (!verifier) {
+      c.errors.push('verifier agent was not registered');
+      c.done = true;
+      finishIfDone();
+      return;
+    }
+    const findings = {
+      failedChecks: c.checks.filter((check) => !check.ok),
+      auditorIssues: c.audit?.issues ?? [],
+    };
+    const { name, iban, contactEmail, phone } = vendor;
+    run(
+      verifier,
+      c,
+      verifierMessage(c.doc.file, c.doc.text, { name, iban, contactEmail, phone }, findings),
+      VERIFY_OUTPUT
+    );
+    return;
+  }
+
+  c.done = true;
+  finishIfDone();
+}
+
+// Logs every answer and combines the independent Extractor and Auditor results.
 const monitor = createHuman({
   name: 'Monitoring',
   capabilities: [],
@@ -298,6 +289,25 @@ const monitor = createHuman({
             return finishIfDone();
           }
 
+          const extracted = extractorCase.get(event.producerId);
+          if (extracted && !extractionAnswered.has(extracted)) {
+            extractionAnswered.add(extracted);
+            settle(extracted, event.producerId);
+
+            const answer = answerText(event.payload);
+            const parsed = parseExtraction(answer);
+            if (!parsed.ok) {
+              extracted.errors.push(
+                `extractor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`
+              );
+            } else {
+              extracted.extraction = parsed.value;
+              extracted.checks = caseChecks(extracted.doc, parsed.value, vendors);
+            }
+            completeAnalysisIfReady(extracted);
+            return;
+          }
+
           const c = auditorCase.get(event.producerId);
           if (!c || c.done || auditAnswered.has(c)) return;
           auditAnswered.add(c);
@@ -305,13 +315,21 @@ const monitor = createHuman({
 
           const answer = answerText(event.payload);
           const parsed = parseAudit(answer);
-          if (parsed.ok) c.audit = parsed.value;
-          else c.errors.push(`auditor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
-          // Wait for the Verifier if bank details need confirming.
-          if (!needsVerification(c, vendors)) {
-            c.done = true;
-            finishIfDone();
+          if (parsed.ok) {
+            const unsupportedQuotes = parsed.value.issues
+              .filter((issue) => issue.quote && !quoteInSource(issue.quote, c.doc.text))
+              .map((issue) => issue.field);
+            if (unsupportedQuotes.length > 0) {
+              c.errors.push(
+                `auditor answer rejected: issue evidence not found in source for ${unsupportedQuotes.join(', ')}`
+              );
+            } else {
+              c.audit = parsed.value;
+            }
+          } else {
+            c.errors.push(`auditor answer rejected: ${parsed.error}. Answer started with: ${preview(answer)}`);
           }
+          completeAnalysisIfReady(c);
         },
       },
     },
@@ -496,7 +514,9 @@ function handleModelError(error: unknown): void {
   setTimeout(() => {
     retryScheduled = false;
     callQueue.length = 0; // queued calls are pending too and get re-run below
-    for (const [c, loop] of [...pendingLoops]) run(loop.agent, c, loop.message, loop.output);
+    for (const loop of [...pendingLoops.values()]) {
+      run(loop.agent, loop.c, loop.message, loop.output);
+    }
   }, delayMs);
 }
 
@@ -513,7 +533,52 @@ console.log(`${invoices.length} documents, ${invoices.length * 3} agents, approv
 if (approved.size) console.log(`Human approval given for: ${[...approved].join(', ')}`);
 console.log('');
 
-// All extractors start at once and run in parallel.
-for (const { agent, c } of extractors) {
-  run(agent, c, extractorMessage(c.doc.file, c.doc.text), EXTRACTION_OUTPUT);
+async function connectNetworkAgents(): Promise<void> {
+  const inviteUrl = process.env.MOZAIK_INVITE?.trim();
+  if (!inviteUrl) return;
+
+  const link = readInviteLink(inviteUrl, HOSTED_NETWORK);
+  if (!link) {
+    throw new Error(
+      'MOZAIK_INVITE must be a quoted link like "https://network.app.jigjoy.ai#nt_..." or a bare nt_ invite.'
+    );
+  }
+
+  const client = new NetworkClient({ origin: link.origin });
+  for (const name of networkAgents) {
+    const peer = await client.createPeer({
+      name,
+      role: 'agent',
+      capabilities: ['message'],
+      invite: link.invite,
+      policy: { rules: [] },
+    });
+    if (!peer.invitedTo) throw new Error(`Network did not assign an invite network to peer "${name}".`);
+    await joinNetwork(peer, peer.invitedTo, client);
+  }
+
+  console.log(`Connected ${networkAgents.length} agents to Mozaik Network.`);
 }
+
+async function start(): Promise<void> {
+  try {
+    await connectNetworkAgents();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    fail(`could not connect agents to Mozaik Network: ${message}`);
+  }
+
+  console.log(`Starting Extractor and Auditor loops concurrently for ${analyses.length} documents.`);
+  const auditVendors = vendors.map(({ id, name, iban, emailDomain }) => ({
+    id,
+    name,
+    iban,
+    emailDomain,
+  }));
+  for (const { extractor, auditor, c } of analyses) {
+    run(extractor, c, extractorMessage(c.doc.file, c.doc.text), EXTRACTION_OUTPUT);
+    run(auditor, c, auditorMessage(c.doc.file, c.doc.text, auditVendors), AUDIT_OUTPUT);
+  }
+}
+
+void start();
