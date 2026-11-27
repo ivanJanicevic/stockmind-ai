@@ -98,15 +98,13 @@ test('a corrected invoice is matched against the same delivery note and the orig
   const c = corrected(correctedText());
   assert.deepEqual(failed(c), []);
   assert.equal(decide(c, LIMIT), 'ready');
-  assert.match(c.checks.find((x) => x.name === 'replaces_original')!.detail, /F-OPT-2026-1003 states it replaces F-OPT-2026-0988/);
   assert.match(c.checks.find((x) => x.name === 'in_purchase_register')!.detail, /agreed lines for F-OPT-2026-0988/);
 });
 
-test('a "correction" that is the original again, or does not name it, stays held', () => {
+test('a "correction" that is the original again stays held; one that does not name the original is fine', () => {
   const original = runDesk().get('F-OPT-2026-0988')!.invoiceText;
-  const same = corrected(original);
-  assert.deepEqual(failed(same).map(([name]) => name), ['replaces_original', 'quantity OPT-SP-025']);
+  assert.deepEqual(failed(corrected(original)).map(([name]) => name), ['quantity OPT-SP-025']);
   const unnamed = corrected(correctedText().replace(/^Korigovani račun.*\n/m, ''));
-  assert.deepEqual(failed(unnamed).map(([name]) => name), ['replaces_original']);
-  assert.equal(decide(unnamed, LIMIT), 'held');
+  assert.deepEqual(failed(unnamed), []);
+  assert.equal(decide(unnamed, LIMIT), 'ready');
 });

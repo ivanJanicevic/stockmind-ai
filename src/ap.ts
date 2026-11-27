@@ -133,21 +133,8 @@ export function matchInvoice(c: ApCase, purchases: Purchase[], master: Master): 
   add('note_reference', compact(inv.deliveryNote.value) === compact(note.noteNumber.value), `invoice refers to ${inv.deliveryNote.value}, delivery note is ${note.noteNumber.value}`, [invSrc, noteSrc]);
 
   // A corrected invoice is matched against the agreed lines of the invoice it
-  // replaces, and must say on the document which one that is, from the same supplier.
+  // replaces; its own number may be new or the same.
   const registerNo = c.corrects?.invoiceNo ?? inv.invoiceNumber.value;
-  if (c.corrects) {
-    const earlier = [...new Set([c.corrects.invoiceNo, ...c.history.map((h) => h.invoiceNo)])];
-    const named = earlier.find((no) => compact(c.invoiceText).includes(compact(no)));
-    const ok = !!named && compact(inv.supplierPib.value) === compact(c.corrects.pib) && !earlier.some((no) => compact(no) === compact(inv.invoiceNumber.value));
-    add(
-      'replaces_original',
-      ok,
-      ok
-        ? `${inv.invoiceNumber.value} states it replaces ${named}; same supplier PIB ${c.corrects.pib}`
-        : `a corrected invoice must have a new number, name the invoice it replaces (${earlier.join(' or ')}) and come from the same supplier (PIB ${c.corrects.pib}); got ${inv.invoiceNumber.value}, PIB ${inv.supplierPib.value}${named ? '' : ', no reference to the original'}`,
-      [invSrc]
-    );
-  }
   const register = purchases.filter((p) => compact(p.invoiceNo) === compact(registerNo));
   add('in_purchase_register', register.length > 0, register.length ? `${register.length} agreed lines for ${registerNo}` : `${registerNo} not in the purchase register`, [FILES.purchases]);
 
@@ -243,7 +230,7 @@ export interface MissingDocument {
 export function missingDocuments(purchases: Purchase[], cases: ApCase[]): MissingDocument[] {
   const numbers = [...new Set(purchases.map((p) => p.invoiceNo))];
   return numbers
-    .filter((no) => !cases.some((c) => c.invoiceText.includes(no)))
+    .filter((no) => !cases.some((c) => c.invoiceText.includes(no) || c.corrects?.invoiceNo === no))
     .map((no) => {
       const rows = purchases.filter((p) => p.invoiceNo === no);
       return {

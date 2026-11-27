@@ -48,16 +48,16 @@ test('altered or invented values are rejected', () => {
   const text = readDoc('faktura-04-sokovi.txt');
   const doc = idealInvoice(text);
   const cheaper = { ...doc, lines: doc.lines.map((l, i) => (i === 0 ? { ...l, unitPrice: 72 } : l)) };
-  assert.match(verifyInvoice(cheaper, text).join(), /lines\[0\] OPT-CC-025: 72 not printed/);
+  assert.match(verifyInvoice(cheaper, text).join(), /OPT-CC-025 Coca-Cola 0,25 l staklo: read 72,00, which is not printed/);
   const foreign = { ...doc, totalAmount: { value: 33408, quote: 'Za uplatu RSD: 33.408,01' } };
-  assert.match(verifyInvoice(foreign, text).join(), /totalAmount: quote .* not found/);
+  assert.match(verifyInvoice(foreign, text).join(), /Total to pay: the quoted text .* is not on the document/);
   // "1" appears in the row ("1 l") but not as a price: still rejected.
   const milk = readDoc('faktura-06-mleko.txt');
   const milkDoc = idealInvoice(milk);
   const lying = { ...milkDoc, lines: milkDoc.lines.map((l, i) => (i === 1 ? { ...l, unitPrice: 1 } : l)) };
-  assert.match(verifyInvoice(lying, milk).join(), /lines\[1\] MD-MB-3510: 1 not printed/);
+  assert.match(verifyInvoice(lying, milk).join(), /MD-MB-3510 .*: read 1,00, which is not printed/);
   const wrongPib = { ...doc, supplierPib: { value: '100000099', quote: 'PIB: 100000050' } };
-  assert.match(verifyInvoice(wrongPib, text).join(), /supplierPib/);
+  assert.match(verifyInvoice(wrongPib, text).join(), /Supplier PIB/);
 });
 
 test('review fixes: shortened, merged or column-shifted quotes are rejected', () => {
@@ -68,13 +68,21 @@ test('review fixes: shortened, merged or column-shifted quotes are rejected', ()
   assert.match(verifyNote(hidden, text).join(), /not a whole row/);
   // Full row but expiry left empty.
   const empty = { ...doc, lines: doc.lines.map((l, i) => (i === 1 ? { ...l, expiryDate: '' } : l)) };
-  assert.match(verifyNote(empty, text).join(), /expiry date printed .* but not returned/);
+  assert.match(verifyNote(empty, text).join(), /prints an expiry date but none was read/);
 
   const beer = readDoc('otpremnica-08-pivo.txt');
   const beerDoc = idealNote(beer);
   // "6 gajbi x 20" in the note column: quantity must be the "kom 120" column.
   const shifted = { ...beerDoc, lines: beerDoc.lines.map((l, i) => (i === 0 ? { ...l, quantity: 20 } : l)) };
-  assert.match(verifyNote(shifted, beer).join(), /quantity 20 kom not printed as such/);
+  assert.match(verifyNote(shifted, beer).join(), /read quantity "kom 20", the delivery note prints "kom 120"/);
+});
+
+test('a pack size read as the unit is explained in plain words', () => {
+  // Seen in a real run: "Espresso kafa u zrnu 1 kg … 22 kom" read as name "Espresso kafa u zrnu", unit "kg".
+  const text = readDoc('faktura-05-kafa.txt');
+  const doc = idealInvoice(text);
+  const misread = { ...doc, lines: doc.lines.map((l, i) => (i === 0 ? { ...l, name: 'Espresso kafa u zrnu', unit: 'kg' } : l)) };
+  assert.deepEqual(verifyInvoice(misread, text), ['ZP-ESP-1000 Espresso kafa u zrnu: read quantity "22 kg", the invoice prints "22 kom"']);
 });
 
 test('review fixes: a plain hyphen for an en dash still matches', () => {

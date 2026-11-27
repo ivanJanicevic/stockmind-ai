@@ -144,25 +144,53 @@ export function parseNote(answer: string): Parsed<NoteDoc> {
   }
 }
 
+// Messages are for the person who re-checks the invoice: which field or item,
+// what the clerk read, and what the document prints.
+const FIELD: Record<string, string> = {
+  invoiceNumber: 'Invoice number',
+  supplierName: 'Supplier name',
+  supplierPib: 'Supplier PIB',
+  supplierAccount: 'Bank account',
+  deliveryNote: 'Delivery note number',
+  issueDate: 'Issue date',
+  dueDate: 'Due date',
+  totalAmount: 'Total to pay',
+  noteNumber: 'Delivery note number',
+  deliveryDate: 'Delivery date',
+};
+const item = (l: { code: string; name: string }) => `${l.code} ${l.name}`;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// What the row actually prints for the quantity: on an invoice the read
+// quantity and the unit after it ("22 kom"); on a delivery note the read unit
+// and the number after it ("kom 120").
+function printedQuantity(quote: string, quantity: number, unit: string, unitFirst: boolean): string | undefined {
+  const re = unitFirst
+    ? new RegExp(`(?:^|\\s)(${escapeRe(unit)} \\d[\\d.,]*)(?=\\s|$)`, 'u')
+    : new RegExp(`(?:^|\\s)(${escapeRe(printedAs(quantity, false))} [\\p{L}.]+)(?=\\s|$)`, 'u');
+  return re.exec(quote)?.[1];
+}
+
 // Header field checks: the quote is in the document and contains the value.
 function checkText(problems: string[], name: string, s: Sourced<string>, text: string): void {
-  if (!quoteInSource(s.quote, text)) problems.push(`${name}: quote "${s.quote}" not found in document`);
-  else if (!compact(s.quote).includes(compact(s.value))) problems.push(`${name}: "${s.value}" does not match quote "${s.quote}"`);
+  const label = FIELD[name] ?? name;
+  if (!quoteInSource(s.quote, text)) problems.push(`${label}: the quoted text "${s.quote}" is not on the document`);
+  else if (!compact(s.quote).includes(compact(s.value))) problems.push(`${label}: read "${s.value}", but the document says "${s.quote}"`);
 }
 function checkDate(problems: string[], name: string, s: Sourced<string>, text: string): void {
-  if (!quoteInSource(s.quote, text)) problems.push(`${name}: quote "${s.quote}" not found in document`);
-  else if (!dateInQuote(s.value, s.quote)) problems.push(`${name}: date ${s.value} does not match quote "${s.quote}"`);
+  const label = FIELD[name] ?? name;
+  if (!quoteInSource(s.quote, text)) problems.push(`${label}: the quoted text "${s.quote}" is not on the document`);
+  else if (!dateInQuote(s.value, s.quote)) problems.push(`${label}: read ${s.value}, but the document says "${s.quote}"`);
 }
 // A line quote must be one whole printed row: a shortened quote could hide a
 // column (e.g. the expiry date), a longer one could borrow the next row's values.
 const isWholeLine = (quote: string, text: string) => text.split('\n').some((line) => squash(line) === squash(quote));
 
 function checkLine(problems: string[], name: string, quote: string, text: string, code: string, values: { n: number; money: boolean }[]): void {
-  if (!isWholeLine(quote, text)) return void problems.push(`${name}: quote "${quote}" is not a whole row of the document`);
-  if (!compact(quote).includes(compact(code))) return void problems.push(`${name}: code ${code} not in quote "${quote}"`);
+  if (!isWholeLine(quote, text)) return void problems.push(`${name}: the quoted row is not a whole row of the document ("${quote}")`);
+  if (!compact(quote).includes(compact(code))) return void problems.push(`${name}: the quoted row doesn't contain the code ${code} ("${quote}")`);
   const tokens = tokensOf(quote);
-  const missing = values.filter(({ n, money }) => !tokens.has(printedAs(n, money))).map(({ n }) => n);
-  if (missing.length) problems.push(`${name}: ${missing.join(', ')} not printed in "${quote}"`);
+  const missing = values.filter(({ n, money }) => !tokens.has(printedAs(n, money))).map(({ n, money }) => printedAs(n, money));
+  if (missing.length) problems.push(`${name}: read ${missing.join(', ')}, which ${missing.length > 1 ? 'are' : 'is'} not printed in the row "${quote}"`);
 }
 
 // One message per value that can't be traced to the document text.
@@ -175,14 +203,15 @@ export function verifyInvoice(doc: InvoiceDoc, text: string): string[] {
   checkText(problems, 'deliveryNote', doc.deliveryNote, text);
   checkDate(problems, 'issueDate', doc.issueDate, text);
   checkDate(problems, 'dueDate', doc.dueDate, text);
-  if (!quoteInSource(doc.totalAmount.quote, text)) problems.push(`totalAmount: quote "${doc.totalAmount.quote}" not found in document`);
-  else if (!has(numbersIn(doc.totalAmount.quote), doc.totalAmount.value)) problems.push(`totalAmount: ${doc.totalAmount.value} not printed in "${doc.totalAmount.quote}"`);
-  doc.lines.forEach((l, i) => {
+  if (!quoteInSource(doc.totalAmount.quote, text)) problems.push(`Total to pay: the quoted text "${doc.totalAmount.quote}" is not on the document`);
+  else if (!has(numbersIn(doc.totalAmount.quote), doc.totalAmount.value)) problems.push(`Total to pay: read ${printedAs(doc.totalAmount.value, true)}, but the document says "${doc.totalAmount.quote}"`);
+  doc.lines.forEach((l) => {
     // Quantity must be the column before the unit ("96 kom"), not any number in the row.
     if (!compact(l.quote).includes(compact(`${printedAs(l.quantity, false)} ${l.unit}`))) {
-      problems.push(`lines[${i}] ${l.code}: quantity ${l.quantity} ${l.unit} not printed as such in "${l.quote}"`);
+      const printed = printedQuantity(l.quote, l.quantity, l.unit, false);
+      problems.push(`${item(l)}: read quantity "${printedAs(l.quantity, false)} ${l.unit}", ${printed ? `the invoice prints "${printed}"` : `not printed as such in the row "${l.quote}"`}`);
     }
-    checkLine(problems, `lines[${i}] ${l.code}`, l.quote, text, l.code, [
+    checkLine(problems, item(l), l.quote, text, l.code, [
       { n: l.quantity, money: false },
       { n: l.unitPrice, money: true },
       { n: l.vatRate, money: false },
@@ -197,14 +226,15 @@ export function verifyNote(doc: NoteDoc, text: string): string[] {
   checkText(problems, 'noteNumber', doc.noteNumber, text);
   checkText(problems, 'supplierPib', doc.supplierPib, text);
   checkDate(problems, 'deliveryDate', doc.deliveryDate, text);
-  doc.lines.forEach((l, i) => {
-    checkLine(problems, `lines[${i}] ${l.code}`, l.quote, text, l.code, [{ n: l.quantity, money: false }]);
+  doc.lines.forEach((l) => {
+    checkLine(problems, item(l), l.quote, text, l.code, [{ n: l.quantity, money: false }]);
     // Delivery notes print unit then quantity ("kom 120").
     if (!compact(l.quote).includes(compact(`${l.unit} ${printedAs(l.quantity, false)}`))) {
-      problems.push(`lines[${i}] ${l.code}: quantity ${l.quantity} ${l.unit} not printed as such in "${l.quote}"`);
+      const printed = printedQuantity(l.quote, l.quantity, l.unit, true);
+      problems.push(`${item(l)}: read quantity "${l.unit} ${printedAs(l.quantity, false)}", ${printed ? `the delivery note prints "${printed}"` : `not printed as such in the row "${l.quote}"`}`);
     }
-    if (l.expiryDate && !dateInQuote(l.expiryDate, l.quote)) problems.push(`lines[${i}] ${l.code}: expiry ${l.expiryDate} not in "${l.quote}"`);
-    if (!l.expiryDate && /\d{2}\.\d{2}\.\d{4}/.test(l.quote)) problems.push(`lines[${i}] ${l.code}: expiry date printed in "${l.quote}" but not returned`);
+    if (l.expiryDate && !dateInQuote(l.expiryDate, l.quote)) problems.push(`${item(l)}: read expiry ${l.expiryDate}, which is not in the row "${l.quote}"`);
+    if (!l.expiryDate && /\d{2}\.\d{2}\.\d{4}/.test(l.quote)) problems.push(`${item(l)}: the row prints an expiry date but none was read ("${l.quote}")`);
   });
   return problems;
 }

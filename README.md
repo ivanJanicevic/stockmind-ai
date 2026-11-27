@@ -185,7 +185,7 @@ A hold usually ends with the supplier sending a corrected invoice. The desk re-c
 1. **Only a held invoice** can be replaced, and only once its agents are done (at most 2 corrections; then by hand). Ready, approved and waiting-for-approval invoices can't.
 2. The PDF's text is read by `src/pdf.ts` (no dependencies). A scan or a file without text is rejected.
 3. **A new Invoice Clerk** (a new agent that runs once, `Invoice Clerk 07 · v2`) reads it, and its answer is verified against that text like any other.
-4. **Code runs the same three-way match** against the **unchanged delivery note** and the agreed prices of the **original** invoice number. One more blocking check, `replaces_original`: the corrected invoice must have a new number, name the invoice it replaces, and come from the same supplier (PIB).
+4. **Code runs the same three-way match** against the **unchanged delivery note** and the agreed prices of the **original** invoice number. The corrected invoice may keep the original number or have a new one; it must refer to this delivery note (`note_reference`) and come from the same supplier (`same_supplier`).
 5. **Same decision rules:** ready, needs approval above the limit (approvals are per invoice number), or held again with a new claim. If the clerk fails or doesn't answer, the invoice stays held.
 6. **History:** the held version, its problems and its claim stay on the case, in the dashboard and in `out/review.md`. The payment draft and report are rewritten.
 

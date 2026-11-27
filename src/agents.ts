@@ -46,6 +46,9 @@ OUTPUT
   "totalAmount":     { "value": number, "quote" }  // "Za uplatu RSD"
   "lines": [ { "code", "name", "quantity", "unit", "unitPrice" (excl. VAT), "vatRate", "lineTotal" (incl. VAT), "quote": the whole printed row } ]
 }
+// "name" is the whole item name as printed, including a pack size in it: "Espresso kafa u zrnu 1 kg".
+// "quantity" is the "Kol." column and "unit" the "JM" column right after it ("kom", "kut"), never a size from the name.
+// Example: "1. ZP-ESP-1000 Espresso kafa u zrnu 1 kg 22 kom 2.450,00 0% 20 64.680,00" → name "Espresso kafa u zrnu 1 kg", quantity 22, unit "kom".
 
 RULES${COMMON_RULES}`;
 
@@ -65,6 +68,8 @@ OUTPUT
   "deliveryDate": { "value", "quote" }  // date of the delivery note
   "lines": [ { "code", "name", "unit", "quantity", "expiryDate" ("Rok trajanja" as YYYY-MM-DD, "" if none), "quote": the whole printed row } ]
 }
+// "name" is the whole item name as printed, including a pack size in it: "Jelen pivo 0,5 l povratna boca".
+// "unit" is the "JM" column and "quantity" the "Količina" column right after it ("kom 120"), never a number from the name or the note column ("6 gajbi x 20").
 
 RULES${COMMON_RULES}`;
 
