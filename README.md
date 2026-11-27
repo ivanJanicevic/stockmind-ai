@@ -1,89 +1,96 @@
-# StockMind AI
+# StockMind AI — café finance desk
 
-**Agents in Finance: from invoices to a validated SEPA payment draft**
+**Agents in Finance · built on Mozaik**
 
-Accounts payable teams receive invoices and emails in every format. Someone retypes the payment details, checks them, and has to catch the one email that says "our bank account has changed". StockMind AI hands that work to a team of Mozaik agents:
-- every value is traced back to a quote in its source document;
-- every agent's work is checked by code and by another agent;
-- anything doubtful is held for a human, with a verification request already drafted.
+A small café's owner gets supplier invoices, delivery notes, a POS export and monthly bills, and has no finance team to check them. Before paying, someone should ask:
+- Did we actually receive what we're invoiced for, at the agreed price?
+- Is anything expired?
+- Is stock going missing?
+- Are supplier price rises and new costs quietly turning the month into a loss?
 
-> Draft for human review only. Not financial advice. No payment is ever sent. All data is synthetic.
+StockMind AI hands that to a team of Mozaik agents that work **at the same time** on one shared state:
+- clerks read every document;
+- analysts interpret code-computed numbers;
+- code checks every agent against the sources and against the other agents;
+- a reviewer combines everything into this week's priorities.
 
-## What it does
+Payments are drafted only for invoices that pass every check. Anything doubtful is held for a person, with a supplier claim already drafted.
 
-1. Six synthetic documents (invoices and emails) each start an **Extractor and an independent Auditor concurrently**. All twelve analysis loops are launched without waiting for another agent's answer.
-2. **Deterministic checks** test each extraction against the source document and vendor master, while the Auditor independently reviews the document and vendor master for fraud signals. Their results are combined in shared runtime state.
-3. If bank details look wrong or fraudulent, a **Verifier agent** starts after the parallel analysis is complete. It drafts a call-back request to the vendor's contact **on file**, never to whoever sent the document.
-4. A **payment policy** decides each document:
-   - **Ready**: all checks pass and the Auditor approves. Included in the SEPA draft.
-   - **Needs human approval**: clean, but above the agent's spending limit (`APPROVAL_LIMIT_EUR`). A human releases it with `--approve`.
-   - **Blocked**: any failed check, Auditor concern, or agent error. Blocked payments can't be approved past.
-5. Output:
-   - `out/sepa-draft.xml`: an ISO 20022 `pain.001.001.09` credit transfer draft for the released payments.
-   - `out/review.md`: the decision for each document, every value with its source quote, all checks, Auditor issues and verification drafts.
+**Intended user:** the owner or bookkeeper of a small café or shop. The demo uses the synthetic café „Plava Šolja“ (Belgrade, RSD).
 
-The sample batch is built to exercise every control:
+> Decision support on synthetic data. Not financial advice. No payment or e-mail is ever sent.
 
-| Document | Scenario | What catches it | Result |
-| --- | --- | --- | --- |
-| INV-1001 | Clean invoice | – | Ready |
-| INV-1002 | "URGENT – new bank details" email from a lookalike domain | IBAN ≠ vendor master, sender domain ≠ vendor domain, Auditor | Blocked + verification request |
-| INV-1003 | IBAN with a typo | mod-97 checksum, vendor master, Auditor | Blocked + verification request |
-| INV-1004 | EUR 12,400, above the agent limit | approval policy | Needs human approval |
-| INV-1005 | Reminder email for INV-1001 | batch duplicate check | Blocked |
-| INV-1006 | Clean invoice | – | Ready |
+## What it finds in the sample data
+
+Every row below is found by code from `data/`, and the tests in `test/` pin each number.
+
+| Problem | Evidence | Result |
+| --- | --- | --- |
+| Coca-Cola invoiced above the agreed price | faktura-04: 79,00 vs agreed 72,00 per bottle | invoice held, 806,40 RSD at stake, claim drafted |
+| Espresso beans over-invoiced | faktura-05: 22 invoiced, 20 on the delivery note | held, 5.880,00 RSD, claim |
+| Sprite over-invoiced | faktura-07: 72 invoiced, 48 delivered | held, 2.016,00 RSD, claim |
+| Jelen beer over-invoiced | faktura-08: 140 invoiced, 120 delivered | held, 2.880,00 RSD, claim |
+| Oat drink expired on delivery | otpremnica-03: expired 20.11.2026, delivered 26.11.2026 | held, 3.744,00 RSD, claim (short-dated cream is a warning) |
+| Large clean invoice | faktura-01: 89.024,00 RSD, above the 50.000 RSD agent limit | waits for `--approve` |
+| Clean invoice | faktura-06: 35.102,80 RSD | in the payment draft |
+| Invoices in the register with no document | R-47/2026, F-ZP-2026-01262, F-MD-2026-55390 | reported, not paid |
+| Schweppes Tonic sold beyond deliveries | 28 sold vs 24 delivered; first oversell on POS row 1905, receipt …-2193, 24.12.2026 13:41 | stock finding |
+| Karamel latte demand collapse | 39 → 27 → 22 → 7 per week (−82 %), price unchanged | sales finding |
+| Supplier price rises | espresso beans 2.450 → 3.480 (+42 %), milk, barista milk, domestic coffee | margin finding (espresso 88,75 % → 84,42 %) |
+| Month turns into a loss | run-rate result 30.079,68 → −16.998,72 RSD; rent, electricity, card fees and maintenance up 50.550 RSD a month | margin and cost finding |
 
 ## Architecture
 
 ```text
-                       shared Mozaik RuntimeState: one case per document
-          ┌──────────────────────────────────────────────────────────────────┐
- document 1 ──┬─> Extractor 1 ─> source + vendor checks ────────────────┐   │
-              └─> Auditor 1 ───> independent source/vendor review ──────┤   │
- document 2 ──┬─> Extractor 2 ─> source + vendor checks ────────────────┤   │
-              └─> Auditor 2 ───> independent source/vendor review ──────┤   │
-    ...          all Extractor and Auditor loops launch in parallel      ├───┴─> combine results
- document 6 ──┬─> Extractor 6 ─> source + vendor checks ────────────────┤          │
-              └─> Auditor 6 ───> independent source/vendor review ──────┘          ├─ bank issue? ─> Verifier
-                                                                               └─> duplicate check ─> policy
-                                                                                     ├─> SEPA draft
-                                                                                     └─> review report
+ t=0 ──┬─ Stock Analyst ──────────┐   (code-computed rows: stock vs deliveries)
+       ├─ Sales Analyst ──────────┤   (weekly demand per product)
+       ├─ Margin & Cost Analyst ──┤   (price rises, margins, P&L, cost changes)
+       │                          │
+       ├─ Invoice Clerk 01 ──┐    │
+       ├─ Receiving Clerk 01 ┴─ three-way match ─ held? ─> Claims Writer 01
+       │        …  7 invoice / delivery-note pairs, all in parallel  …
+       ├─ Invoice Clerk 08 ──┐    │
+       └─ Receiving Clerk 08 ┴─ three-way match ─ held? ─> Claims Writer 08
+                                  │
+              all specialists in ─┴─> Reviewer ─> payment decision ─> human --approve
+                                                     │
+                            out/review.md  +  out/payment-draft.csv (draft, not sent)
+
+   all results live in one Mozaik RuntimeState; a Monitoring participant reacts to
+   every model.answer event and starts the agents that depend on it
 ```
 
-- **Genuine parallel work:** each document's Extractor and Auditor are launched together. The Auditor independently reviews the source document and vendor master; deterministic checks validate the Extractor's result. The monitor combines both answers in the shared case state. The Verifier runs only when those results show that bank details need confirmation.
-- **Structured output:** Extractor, Auditor and Verifier answers are constrained by JSON Schemas through Mozaik's `structuredOutput`. If a model rejects a schema, the run retries without it and relies on the prompt contract and a tolerant parser.
-- **Every number has a source** (`src/parsing.ts`):
-  - Extracted values whose quote isn't in the document, or doesn't match the value, are rejected.
-  - A Verifier draft that contains a figure not found in the document, the vendor master or the extraction is withheld.
-- **Validation checks** (`src/checks.ts`):
-  - IBAN mod-97 checksum, EUR currency, known vendor, IBAN matches the vendor master;
-  - the email sender's domain matches the vendor domain;
-  - line items sum to the total, the amount is positive, and no duplicates across the batch.
-- **Human in the loop:** payments above `APPROVAL_LIMIT_EUR` wait for `--approve <id>`. Approval never overrides a failed check or an Auditor concern.
-- **Resilience:**
-  - model calls are rate-limited (`REQUESTS_PER_MINUTE`);
-  - Gemini 429/503 errors are retried or moved to `FALLBACK_MODELS`;
-  - if everything fails, a partial report is still written.
-- **Usage:** token counts from `inference.completed` events are summed and shown in the console and the report.
-- **Mozaik Network (optional):** set `MOZAIK_INVITE` to a quoted hosted Network invite link to join one peer per Extractor, Auditor and Verifier. Quote the value because the link contains `#`. The peers only mirror the agent names for visibility: they don't receive invoice data and don't take part in the work, which happens in the local Mozaik runtime. Joining runs in the background with a 15-second timeout, and a failure never stops the run; the report shows the Network status.
+**Where the multi-agent work happens** (`src/index.ts`):
+- **Concurrency.** All 3 analysts and all 14 clerks are started at once, rate-limited to `REQUESTS_PER_MINUTE`. Matching and claims for one invoice start as soon as its two clerks answer, while other agents are still working. The report's **agent timeline** shows the overlap.
+- **Shared state.** `AppState extends RuntimeState` holds the invoice cases, analyst results, review and timeline. Every agent's result is written there, and the report is built from it.
+- **Coordination through events.** The Monitoring participant handles Mozaik `model.answer` events. Two clerk answers for a pair trigger the three-way match; a hold triggers that invoice's Claims Writer; all specialists done triggers the Reviewer. `inference.completed` events are summed into token usage.
+- **Checks between agents.**
+  - The Invoice Clerk and Receiving Clerk read different documents, and code compares their outputs with each other and with the agreed prices.
+  - Each analyst finding must cite a code-computed row and may only use that row's figures.
+  - The Reviewer may only cite accepted findings and AP results.
+  - Claim drafts may only use figures from the documents and failed checks.
+  - If our own clerks' reading can't be verified, no claim is sent and a person re-checks the invoice.
+
+**Every number has a source:**
+- **Document values** (`src/documents.ts`). Every value a clerk returns carries a verbatim quote, and the quote must be in the document. Amounts must appear in it as printed, for example `175,00`.
+- **Business numbers** (`src/analytics.ts`). Computed by code with file and line sources, for example `promet_2026-11-26_do_2026-12-25.csv:1905` or `nabavne_cene.csv:19`. The analysts never see the 2.000 POS rows, only the computed rows.
+- **Free text.** Findings, review actions and claim drafts are checked by `unsourcedFigures` (`src/parsing.ts`), and anything with an unsourced figure is rejected and listed in the report.
 
 | File | Role |
 | --- | --- |
-| `src/index.ts` | Runtime, agents, event wiring, retries, output |
-| `src/prompts.ts` | Agent instructions with input/output contracts and JSON Schemas |
-| `src/parsing.ts` | Answer parsing and source verification |
-| `src/checks.ts` | Validation checks, verification trigger, payment policy |
-| `src/sepa.ts` | pain.001 XML builder |
-| `src/report.ts` | Review report |
-| `src/data/` | Synthetic invoices, vendor master, debtor account |
-
-## Prerequisites
-
-- Node.js 24+
-- npm
-- A Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The free tier is enough.
+| `src/index.ts` | Mozaik runtime, agents, event coordination, rate-limited queue, retries, output |
+| `src/agents.ts` | Agent instructions (INPUT / TASK / OUTPUT / RULES) and JSON Schemas |
+| `src/documents.ts` | Invoice and delivery-note answers: parsing and verification against the text |
+| `src/ap.ts` | Three-way match, payment decision, missing documents |
+| `src/analytics.ts` | Stock check, weekly trend, price rises, margins, period result |
+| `src/findings.ts` | Guards for analyst findings and the review |
+| `src/payments.ts`, `src/report.ts` | Payment draft CSV and `out/review.md` |
+| `src/data/load.ts` | Loads `data/` with line numbers |
+| `data/` | Synthetic café dataset (see `data/README.md`); `data/text/` is the text layer of the PDFs |
 
 ## Run it
+
+Prerequisites: Node.js 24+, npm, and a Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The free tier is enough.
 
 ```bash
 git clone https://github.com/ivanJanicevic/stockmind-ai.git
@@ -93,41 +100,74 @@ cp .env.example .env   # then set GEMINI_API_KEY
 npm run dev
 ```
 
-A run takes about 1.5 minutes: 14 model calls at 10 per minute. Then open `out/review.md` and `out/sepa-draft.xml`.
+- **Run time and cost:** about 23 model calls, roughly 2.5 minutes at the default 10 calls per minute. Set `REQUESTS_PER_MINUTE=14` on Flash Lite to make it faster.
+- **Output:** `out/review.md` and `out/payment-draft.csv`.
+- **Human approval:** to approve the invoice above the limit as the human approver, run `npm run dev -- --approve F-ZP-2026-01184`. It is then added to the payment draft as "Approved by human". Approving a held invoice has no effect.
 
-To act as the human approver for the payment above the limit:
+End of a run: the invoice decisions are deterministic, while finding counts depend on the model:
 
-```bash
-npm run dev -- --approve INV-1004
+```text
+F-ZP-2026-01184: needs_approval
+F-MD-2026-55271: held (expired MD-MB-1000) + claim drafted
+F-OPT-2026-0931: held (price OPT-CC-025) + claim drafted
+F-ZP-2026-01197: held (quantity ZP-ESP-1000) + claim drafted
+F-MD-2026-55302: ready
+F-OPT-2026-0988: held (quantity OPT-SP-025) + claim drafted
+F-HS-2026-0412: held (quantity HS-JL-050) + claim drafted
+Stock Analyst: … findings accepted, … rejected
+…
+To approve as a human, re-run with: npm run dev -- --approve F-ZP-2026-01184
+
+Report: out/review.md
+Payment draft: out/payment-draft.csv (1 orders, 35.102,80 RSD)
 ```
-
-INV-1004 is then included in the SEPA draft as "Approved by human". Trying `--approve INV-1002` has no effect, because blocked payments stay blocked.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `GEMINI_API_KEY` | yes | – | Google Gemini API key |
-| `GEMINI_MODEL` | no | `gemini-3.5-flash-lite` | Model used by all agents (free tier: 15 requests/min, 500/day) |
+| `GEMINI_MODEL` | no | `gemini-3.5-flash-lite` | Model for all agents (free tier: 15 requests/min, 500/day) |
 | `FALLBACK_MODELS` | no | – | Comma-separated [Mozaik-supported model ids](https://docs.jigjoy.ai/docs/models) to switch to on quota or overload errors, e.g. `gemini-3.5-flash,claude-haiku-4-5` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | only for those fallbacks | – | Key for a non-Gemini fallback model |
-| `REQUESTS_PER_MINUTE` | no | `10` | Client-side rate limit for model calls. Use `5` with `gemini-3.5-flash` on the free tier |
+| `REQUESTS_PER_MINUTE` | no | `10` | Client-side rate limit for model calls (use `5` with `gemini-3.5-flash` on the free tier) |
 | `RUN_TIMEOUT_MS` | no | `600000` | Stop and write a partial report after this time |
-| `APPROVAL_LIMIT_EUR` | no | `5000` | Payments above this need human approval |
-| `MOZAIK_INVITE` | no | – | Quoted hosted Mozaik Network invite link; joins each agent as a peer |
+| `APPROVAL_LIMIT_RSD` | no | `50000` | Invoices above this need human approval |
+| `MOZAIK_INVITE` | no | – | Quoted hosted Mozaik Network invite link (see below) |
+
+**Mozaik Network (optional).** With `MOZAIK_INVITE` set (quote it, the link contains `#`), each agent also joins the hosted Network as a peer:
+- The peers mirror the agent names for visibility only. They receive no data and do no work; the collaboration happens in the local Mozaik runtime.
+- Joining runs in the background with a 15 s timeout and can never stop a run. The report shows the Network status.
+
+## Tests
+
+```bash
+npm test           # unit tests, no API calls: analytics on the real data, document verification, three-way match, guards
+npm run typecheck
+```
+
+`test/ideal.ts` is a test-only parser for this one synthetic invoice template. It produces the answers a perfect clerk would give, so the matching logic is tested without a model. In the app, the LLM reads the documents (any layout) and code verifies what it read.
+
+## Limitations
+
+- **PDF text.** It is pre-extracted to `data/text/*.txt` with macOS PDFKit (`scripts/extract-pdf-text.sh`); the app reads the text, not the PDF.
+- **Bank accounts.** The supplier accounts are synthetic placeholders that don't pass the Serbian mod-97 control, so only their format and the supplier-master match are checked.
+- **Stock** is deliveries (purchase register) minus recipe consumption. There is no physical stock count.
+- **Period result** is a run-rate: gross margin per day × 30 − that month's fixed costs (excl. VAT). Cost of goods uses recipe cost at the purchase price in force on each sale date. The period is split at the first supplier price rise (2026-12-10). The trend uses 4 full weeks.
+- **Model reading errors.** Flash Lite can misread a line. Verification fails closed: a misread holds the invoice and never pays it, and the report shows why.
+- **Free tier.** About 20 runs a day on Flash Lite. See Troubleshooting for quota errors.
 
 ## Troubleshooting
 
-- **Retries:**
-  - **503/500** (Gemini overloaded): pending agents are retried twice with backoff, then moved to the next model in `FALLBACK_MODELS`.
-  - **429 per-minute limit:** they wait Gemini's `retryDelay` and retry on the same model.
-  - **429 daily quota:** they switch to the next fallback model straight away.
-- **`model call failed (429)` after retries:** the free-tier daily quota for that model is used up. Set `FALLBACK_MODELS`, wait for the reset, or enable billing on the key.
-- If every model fails, the run still writes `out/review.md`, and the affected documents are marked Blocked with the error.
-- **`mozaik cloud: no API key`:** optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch every agent loop live on JigJoy, or ignore the message.
+- **Retries.**
+  - **503/500:** pending agents are retried twice with backoff, then moved to `FALLBACK_MODELS`.
+  - **429 per-minute limit:** they wait Gemini's `retryDelay` and stay on the same model.
+  - **429 daily quota:** they switch to the next fallback straight away.
+- **If every model fails**, `out/review.md` is still written, with the affected items marked.
+- **`mozaik cloud: no API key`** is optional telemetry. Run `npx @mozaik-ai/cloud-sdk pair` to watch every agent loop live on JigJoy, or ignore it.
 
 ## Scripts
 
 ```bash
-npm run dev        # Run the agents (calls Gemini)
+npm run dev        # Run the desk (calls the model)
 npm test           # Unit tests, no API calls
 npm run typecheck  # Type-check
 npm run build      # Compile to dist/
@@ -136,9 +176,9 @@ npm start          # Run the compiled build
 
 ## Ground rules
 
-- **Synthetic data only.** All companies, IBANs, emails and invoices are made up.
-- **Every number has a source.** Each value in the report shows the exact quote it came from, and agent drafts with unsourced figures are withheld.
-- **Not financial advice.** The report and console output say so. Nothing is sent to a bank or a vendor.
+- **Synthetic data only.** Every company, PIB, account, e-mail and document is made up; the PDFs say "PRIMER / SPECIMEN".
+- **Every number has a source.** Each figure in the report shows its file and line or its document quote, and agent text with unsourced figures is rejected.
+- **Not financial advice.** The console, report and payment draft say so. Nothing is sent to a bank or a supplier.
 
 ## Hackathon
 

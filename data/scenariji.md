@@ -1,10 +1,10 @@
 # Evidencija ubačenih scenarija (izmišljeni podaci)
 
-Ovde je tačno zapisano šta je namerno ubačeno u podatke i gde se to vidi. Brojevi redova su linije u fajlu, a zaglavlje je red 1. Svi brojevi su izračunati skriptom iz samih fajlova; isto je i u `scenariji.json`.
+Ovde je tačno zapisano šta je namerno ubačeno u podatke i gde se to vidi. Brojevi redova su linije u fajlu, a zaglavlje je red 1. Svi brojevi su izračunati skriptom iz samih fajlova.
 
 ## 1. Schweppes Tonic prodat preko isporuke
 
-Fajlovi: `prodaja/promet_2026-11-26_do_2026-12-25.csv`, `otpremnice/otpremnica-04-sokovi.json`.
+Fajlovi: `promet_2026-11-26_do_2026-12-25.csv`, `otpremnice/otpremnica-04-sokovi.pdf`.
 
 Isporučeno je 24 kom (OPT-2026-11-0931, šifra OPT-STW-025), a neto prodato 28, što je 4 više. Prvi red preko stanja je **red 1905**: račun `AB12CD34-EF56GH78-2193`, 2026-12-24 u 13:41:04, kumulativno 25.
 
@@ -15,11 +15,11 @@ Isporučeno je 24 kom (OPT-2026-11-0931, šifra OPT-STW-025), a neto prodato 28,
 | 1962 | 2026-12-25 | 15:12:31 | AB12CD34-EF56GH78-2229 | 1 | 27 |
 | 1991 | 2026-12-25 | 20:44:22 | AB12CD34-EF56GH78-2246 | 1 | 28 |
 
-Sve prodaje ovog artikla (28 redova) su u `scenariji.json`.
+Sve prodaje ovog artikla (28 redova) su u `promet_2026-11-26_do_2026-12-25.csv` (šifra 207).
 
 ## 2. Karamel latte (106) sa opadajućom prodajom
 
-Fajl: `prodaja/promet_2026-11-26_do_2026-12-25.csv`. Cena je ista ceo period (330,00 RSD), pada samo potražnja.
+Fajl: `promet_2026-11-26_do_2026-12-25.csv`. Cena je ista ceo period (330,00 RSD), pada samo potražnja.
 
 | Nedelja | Period | Količina | Redova | Prvi red | Poslednji red |
 |---:|---|---:|---:|---:|---:|
@@ -33,7 +33,7 @@ Pad od 1. do 4. nedelje je -82.1%. Poslednja prodaja je u redu 1839 (2026-12-23)
 
 ## 3. Poskupljenje dobavljača
 
-Fajlovi: `troskovi/nabavne_cene.csv` (cene), `prodaja/normativi.json` i `prodaja/artikli.json` (za maržu). Prodajne cene se ne menjaju.
+Fajlovi: `nabavne_cene.csv` (cene), `normativi.json` i `artikli.json` (za maržu). Prodajne cene se ne menjaju.
 
 | Artikal | Stara cena (red, faktura) | Nova cena (red, faktura, datum) | Rast |
 |---|---|---|---:|
@@ -58,7 +58,7 @@ Marža po komadu (bez PDV, RSD):
 
 ## 4. Operativni troškovi koji obaraju profitabilnost
 
-Fajl: `troskovi/troskovi.csv`.
+Fajl: `troskovi.csv`.
 
 | Kategorija | Novembar (red) | Decembar (red) | Razlika |
 |---|---:|---:|---:|
