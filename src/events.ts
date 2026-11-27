@@ -24,6 +24,12 @@ export class WhenAnyAnswer extends SituationSpecification {
   }
 }
 
+export class WhenMessageSent extends SituationSpecification {
+  isSatisfiedBy({ event }: SituationContext): boolean {
+    return event.type === 'message.sent';
+  }
+}
+
 // Carries tokenUsage for each model call.
 export class WhenInferenceCompleted extends SituationSpecification {
   isSatisfiedBy({ event }: SituationContext): boolean {

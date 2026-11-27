@@ -1,14 +1,16 @@
 {
   "name": "stockmind-ai",
   "version": "1.0.0",
-  "description": "Multi-agent accounts payable: invoices to a validated SEPA payment draft, built on Mozaik",
+  "description": "Mozaik agents analyze synthetic cafe sales, inventory, expiry, invoices, and costs",
   "private": true,
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "tsx src/retail.ts",
+    "dev:sepa": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/retail.js",
+    "start:sepa": "node dist/index.js"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +21,7 @@
   },
   "dependencies": {
     "@jigjoy/mozaik-network": "^0.1.0",
+    "@jigjoy/mozaik-rule-engine": "^0.0.2",
     "@mozaik-ai/core": "6.0.0",
     "dotenv": "^18.0.10"
   },

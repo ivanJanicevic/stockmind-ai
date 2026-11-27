@@ -1,6 +1,6 @@
 # Scenariji (zamke) u ulaznim fakturama
 
-Fakture su napravljene po otpremnicama 01–08; cene su dogovorene nabavne cene iz `troskovi/nabavne_cene.csv`.
+Fakture su napravljene po otpremnicama 01–08; cene su dogovorene nabavne cene iz `../nabavne_cene.csv`.
 Očekivano = otpremnica / potvrđen prijem i ugovorena cena. Sve ostale stavke se slažu.
 
 | # | Tip | Faktura | Fajl | Red | Artikal | Očekivano | Na fakturi | Razlika |

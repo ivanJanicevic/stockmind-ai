@@ -5,6 +5,7 @@ import type { SituationContext } from '@mozaik-ai/core';
 import {
   WhenAnswerFrom,
   WhenAnyAnswer,
+  WhenMessageSent,
   answerText,
 } from '../src/events.js';
 
@@ -22,6 +23,12 @@ test('WhenAnyAnswer matches any model answer', () => {
   const spec = new WhenAnyAnswer();
   assert.equal(spec.isSatisfiedBy(ctx('model.answer', 'x')), true);
   assert.equal(spec.isSatisfiedBy(ctx('message.sent', 'x')), false);
+});
+
+test('WhenMessageSent matches only runtime messages', () => {
+  const spec = new WhenMessageSent();
+  assert.equal(spec.isSatisfiedBy(ctx('message.sent', 'sales')), true);
+  assert.equal(spec.isSatisfiedBy(ctx('model.answer', 'sales')), false);
 });
 
 test('answerText extracts text from common payload shapes', () => {

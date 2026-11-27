@@ -9,14 +9,17 @@ Sintetički izvoz prometa iz ESIR kase za hakaton demo. Svi podaci su izmišljen
 | `promet_2026-11-26_do_2026-12-25.csv` | Promet po stavkama računa za 30 dana, 2000 redova |
 | `artikli.json` | Šifrarnik: šifra, GTIN, naziv, prodajna cena, PDV oznaka, veza sa stavkom otpremnice |
 | `normativi.json` | Potrošnja sirovina po prodatom artiklu (npr. espresso = 7 g kafe) i pretvaranje u jedinice sa otpremnica |
-| `scenariji.md`, `scenariji.json` | Evidencija svih namerno ubačenih scenarija |
-| `../troskovi/nabavne_cene.csv` | Nabavne cene po fakturama (veza sa otpremnicama), uključujući poskupljenje |
-| `../troskovi/troskovi.csv` | Mesečni operativni troškovi okt–dec 2026 |
-| `kontrolni_zbirovi.json` | Tačni zbirovi izračunati skriptom (po danu, PDV, plaćanju, artiklu, sirovinama) |
+| `scenariji.md` | Evidencija namerno ubačenih scenarija i kontrolnih rezultata |
+| `nabavne_cene.csv` | Nabavne cene po fakturama (veza sa otpremnicama), uključujući poskupljenje |
+| `troskovi.csv` | Mesečni operativni troškovi okt–dec 2026 |
+| `fakture/*.pdf` | Sintetičke ulazne fakture dobavljača |
+| `otpremnice/*.pdf` | Sintetičke otpremnice sa količinama i rokovima trajanja |
 
 ## Format CSV-a
 
 Separator `;`, decimalni zarez, UTF-8. Jedan red je jedna stavka jednog fiskalnog računa, pa se isti `pfr_broj_racuna` ponavlja za više artikala. Refundacija je poseban račun (`Promet Refundacija`) sa negativnom količinom i iznosom. Poreske oznake: Ђ = 20%, Е = 10% (samo jogurt). Cene sadrže PDV.
+
+Tri šifre dobavljača za pekarske proizvode (`ZK-KRO-001`, `ZK-KIF-001`, `ZK-MAF-001`) su sintetičke demo vrednosti dodate jer su polja bila prazna; nisu preuzete iz stvarnih dokumenata.
 
 ## Pretpostavke
 
@@ -28,12 +31,12 @@ Separator `;`, decimalni zarez, UTF-8. Jedan red je jedna stavka jednog fiskalno
 
 ## Ubačeni scenariji
 
-Tačna evidencija (redovi, računi, nedeljni zbirovi, cene i marže) je u `scenariji.md` i `scenariji.json`. Ukratko:
+Tačna evidencija (redovi, računi, nedeljni zbirovi, cene i marže) je u `scenariji.md`. Ukratko:
 
 1. Schweppes Tonic prodat preko isporučene količine (detalji ispod).
 2. Karamel latte (106) sa opadajućom prodajom iz nedelje u nedelju, uz nepromenjenu cenu.
-3. Poskupljenje kafe (+42%) i mleka (+30%) od 10. i 12.12, u `../troskovi/nabavne_cene.csv`.
-4. Rast operativnih troškova u decembru (kirija, struja, servis aparata), u `../troskovi/troskovi.csv`. Zajedno sa poskupljenjem, procena mesečnog rezultata pada sa 20.244,75 na -27.072,08 RSD.
+3. Poskupljenje kafe (+42%) i mleka (+30%) od 10. i 12.12, u `nabavne_cene.csv`.
+4. Rast operativnih troškova u decembru (kirija, struja, servis aparata), u `troskovi.csv`.
 
 ## Zamka: Schweppes Tonic
 
@@ -109,4 +112,4 @@ PDV je izračunat iz zbira po oznaci (iznos × stopa / (100 + stopa)), zaokruže
 | 2026-12-23 | 18:45:47 | AB12CD34-EF56GH78-2171 | AB12CD34-EF56GH78-2170 | Lav 0,33 | -320,00 |
 | 2026-12-25 | 07:46:47 | AB12CD34-EF56GH78-2210 | AB12CD34-EF56GH78-2209 | Kapućino | -260,00 |
 
-Veza refundacije sa originalnim računom nije u CSV-u (kao ni u formatu primera); data je samo ovde i u `kontrolni_zbirovi.json`.
+Veza refundacije sa originalnim računom nije u CSV-u (kao ni u formatu primera); pojedinačni slučajevi su opisani u `scenariji.md`.
