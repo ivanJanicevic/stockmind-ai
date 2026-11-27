@@ -1,0 +1,33 @@
+PRIMER / SPECIMEN – izmišljeni podaci
+DOBAVLJAČ
+Hmelj i Slad Distribucija d.o.o. (izmišljeno)
+Pivarska 15, 26000 Pančevo
+PIB: 100000067 MB: 21000067
+Tekući račun: 000-0000000000005-00
+KUPAC
+Kafe „Plava Šolja“ d.o.o. (izmišljeno)
+Ulica Primera 12, 11000 Beograd
+PIB: 100000012 MB: 21000012
+OTPREMNICA br. HSD-11/2026-0412
+Datum
+otpremnice:
+Mesto isporuke: 27.11.2026 Veza na narudžbenicu
+NAR-PS-2026-0423
+br.:
+Vozač / reg. oznaka: Kafe „Plava Šolja“, Ulica Primera
+12, Beograd – magacin (ulaz iz
+dvorišta)
+Stefan S. (izmišljeno) /
+PA-000-DD
+R.br Šifra Naziv artikla JM Količina Rok trajanja Napomena
+1 HS-JL-050 Jelen pivo 0,5 l povratna boca kom 120 31.05.2027 6 gajbi x 20
+2 HS-LV-033 Lav pivo 0,33 l povratna boca kom 72 30.04.2027 3 gajbe x 24
+3 HS-HN-033 Heineken 0,33 l nepovratna boca kom 48 31.08.2027 2 pak. x 24
+4 HS-BZ-033 Bezalkoholno pivo 0,33 l kom 24 31.12.2026 1 pak. x 24
+5 HS-KEG-030 Točeno pivo keg 30 l kom 4 15.02.2027 povratni keg
+6 HS-AMB-GJ Povratna ambalaža – gajba kom 9 ambalaža, bez roka
+Ukupno stavki: 6
+Robu primio u ispravnom stanju, osim ako nije drugačije navedeno u napomeni. Reklamacije na količinu primaju se pri prijemu.
+______________________________ ______________________________
+Robu izdao (M.P.) Robu primio (ime, prezime, potpis)
+Sintetički dokument za demo. Sve firme, PIB/MB i osobe su izmišljeni.

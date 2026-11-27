@@ -1,0 +1,15 @@
+{
+  "izmisljeni_podaci": true,
+  "napomena": "Sintetički matični podaci za demo: kupac i dobavljači sa računa. Brojevi računa su placeholderi sa faktura (ne prolaze kontrolu mod 97), a e-mail adrese su izmišljene.",
+  "platilac": {
+    "naziv": "Kafe „Plava Šolja“ d.o.o. (izmišljeno)",
+    "pib": "100000012",
+    "racun": "000-0000000000012-00"
+  },
+  "dobavljaci": [
+    { "naziv": "Zrno Plus Distribucija d.o.o. (izmišljeno)", "pib": "100000029", "racun": "000-0000000000001-00", "email": "racunovodstvo@zrnoplus.example", "telefon": "021/000-0101" },
+    { "naziv": "Mlečni Dvor Promet d.o.o. (izmišljeno)", "pib": "100000043", "racun": "000-0000000000003-00", "email": "prodaja@mlecnidvor.example", "telefon": "034/000-0303" },
+    { "naziv": "Osvežavajuća Pića Trade d.o.o. (izmišljeno)", "pib": "100000050", "racun": "000-0000000000004-00", "email": "finansije@osvezavajuca.example", "telefon": "011/000-0404" },
+    { "naziv": "Hmelj i Slad Distribucija d.o.o. (izmišljeno)", "pib": "100000067", "racun": "000-0000000000005-00", "email": "office@hmeljislad.example", "telefon": "013/000-0505" }
+  ]
+}

@@ -1,0 +1,34 @@
+PRIMER / SPECIMEN – izmišljeni podaci
+DOBAVLJAČ
+Osvežavajuća Pića Trade d.o.o. (izmišljeno)
+Skladišna 7, 11272 Dobanovci
+PIB: 100000050 MB: 21000050
+Tekući račun: 000-0000000000004-00
+KUPAC
+Kafe „Plava Šolja“ d.o.o. (izmišljeno)
+Ulica Primera 12, 11000 Beograd
+PIB: 100000012 MB: 21000012
+OTPREMNICA br. OPT-2026-11-0988
+Datum
+otpremnice:
+Mesto isporuke: 28.11.2026 Veza na narudžbenicu
+NAR-PS-2026-0425
+Kafe „Plava Šolja“, Ulica Primera
+12, Beograd – magacin (ulaz iz
+dvorišta)
+br.:
+Vozač / reg. oznaka: Nikola N. (izmišljeno) /
+BG-000-CC
+R.br Šifra Naziv artikla JM Količina Rok trajanja Napomena
+1 OPT-CC-025 Coca-Cola 0,25 l staklo kom 48 31.07.2027 2 gajbe x 24
+2 OPT-KV-025 Kisela voda 0,25 l staklo kom 48 31.05.2027 2 gajbe x 24
+3 OPT-SP-025 Sprite 0,25 l staklo kom 48 30.06.2027 2 gajbe x 24
+4 OPT-CK-025 Cockta 0,25 l staklo kom 24 31.05.2027 1 gajba x 24
+5 OPT-JAB-020 Sok jabuka 100% 0,2 l kom 48 30.09.2027 2 gajbe x 24
+6 OPT-LC-033 Ledeni čaj breskva 0,33 l kom 24 31.01.2027 1 pak. x 24
+7 OPT-EN-025 Energetsko piće 0,25 l limenka kom 48 31.10.2027 2 pak. x 24
+Ukupno stavki: 7
+Robu primio u ispravnom stanju, osim ako nije drugačije navedeno u napomeni. Reklamacije na količinu primaju se pri prijemu.
+______________________________ ______________________________
+Robu izdao (M.P.) Robu primio (ime, prezime, potpis)
+Sintetički dokument za demo. Sve firme, PIB/MB i osobe su izmišljeni.

@@ -1,0 +1,49 @@
+PRIMER / SPECIMEN – izmišljeni podaci
+Mlečni Dvor Promet d.o.o. (izmišljeno)
+Mlinska 44, 34000 Kragujevac
+PIB: 100000043 MB: 21000043
+Tel. 034/000-0303
+Tekući račun: 000-0000000000003-00
+LOGO
+Kafe „Plava Šolja“ d.o.o. (izmišljeno)
+Ulica Primera 12
+11000 Beograd
+PIB: 100000012 MB: 21000012
+Račun broj: F-MD-2026-55271
+Mesto izdavanja:
+Beograd
+Datum prometa:
+26.11.2026
+Način plaćanja:
+virmanski
+Rok plaćanja:
+11.12.2026
+Datum izdavanja:
+26.11.2026
+Po otpremnici br.:
+MD-OTP-55271
+# Šifra Vrsta robe - usluga Kol. JM Cena bez PDV R % PDV % Vred. sa PDV
+1. MD-SL-0500 Pavlaka za šlag 35% 0,5 l 18 kom 330,00 0% 10 6.534,00
+2. MD-MB-1000 Biljni napitak ovas 1 l 12 kom 260,00 0% 20 3.744,00
+3. MD-JG-0180 Jogurt 2,8% 180 g 24 kom 75,00 0% 10 1.980,00
+4. MD-MS-0250 Maslac 82% 250 g 10 kom 380,00 0% 10 4.180,00
+Slovima:
+šesnaesthiljadačetiristotridesetosam i 00/100 dinara
+Roba isporučena po otpremnici br. MD-OTP-55271 od 26.11.2026.
+Poziv na broj: F-MD-2026-55271
+Uplatu izvršiti na tekući račun 000-0000000000003-00.
+Kontrolna količina: 64,00
+Iznos bez popusta: 14.660,00
+Popust: 0,00
+Rekapitulacija PDV-a: RSD
+Osnovica PDV 20%: 3.120,00
+Iznos PDV 20%: 624,00
+Osnovica PDV 10%: 11.540,00
+Iznos PDV 10%: 1.154,00
+Ukupno vrednost bez PDV: 14.660,00
+Ukupno PDV: 1.778,00
+Za uplatu RSD: 16.438,00
+Račun je punovažan bez pečata i potpisa. Reklamacije u roku od 8 dana od prijema računa.
+______________________________ ______________________________
+Fakturisao Odgovorno lice
+Sintetički dokument za demo. Sve firme, PIB/MB i osobe su izmišljeni. Strana: 1 / 1

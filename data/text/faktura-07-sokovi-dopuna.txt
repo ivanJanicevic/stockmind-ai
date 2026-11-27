@@ -1,0 +1,50 @@
+PRIMER / SPECIMEN – izmišljeni podaci
+Osvežavajuća Pića Trade d.o.o. (izmišljeno)
+Skladišna 7, 11272 Dobanovci
+PIB: 100000050 MB: 21000050
+Tel. 011/000-0404
+Tekući račun: 000-0000000000004-00
+LOGO
+Kafe „Plava Šolja“ d.o.o. (izmišljeno)
+Ulica Primera 12
+11000 Beograd
+PIB: 100000012 MB: 21000012
+Račun broj: F-OPT-2026-0988
+Mesto izdavanja:
+Beograd
+Datum prometa:
+28.11.2026
+Način plaćanja:
+virmanski
+Rok plaćanja:
+13.12.2026
+Datum izdavanja:
+28.11.2026
+Po otpremnici br.:
+OPT-2026-11-0988
+# Šifra Vrsta robe - usluga Kol. JM Cena bez PDV R % PDV % Vred. sa PDV
+1. OPT-CC-025 Coca-Cola 0,25 l staklo 48 kom 72,00 0% 20 4.147,20
+2. OPT-KV-025 Kisela voda 0,25 l staklo 48 kom 38,00 0% 20 2.188,80
+3. OPT-SP-025 Sprite 0,25 l staklo 72 kom 70,00 0% 20 6.048,00
+4. OPT-CK-025 Cockta 0,25 l staklo 24 kom 66,00 0% 20 1.900,80
+5. OPT-JAB-020 Sok jabuka 100% 0,2 l 48 kom 85,00 0% 20 4.896,00
+6. OPT-LC-033 Ledeni čaj breskva 0,33 l 24 kom 80,00 0% 20 2.304,00
+7. OPT-EN-025 Energetsko piće 0,25 l limenka 48 kom 120,00 0% 20 6.912,00
+Slovima:
+dvadesetosamhiljadatristadevedesetšest i 80/100 dinara
+Roba isporučena po otpremnici br. OPT-2026-11-0988 od 28.11.2026.
+Poziv na broj: F-OPT-2026-0988
+Uplatu izvršiti na tekući račun 000-0000000000004-00.
+Kontrolna količina: 312,00
+Iznos bez popusta: 23.664,00
+Popust: 0,00
+Rekapitulacija PDV-a: RSD
+Osnovica PDV 20%: 23.664,00
+Iznos PDV 20%: 4.732,80
+Ukupno vrednost bez PDV: 23.664,00
+Ukupno PDV: 4.732,80
+Za uplatu RSD: 28.396,80
+Račun je punovažan bez pečata i potpisa. Reklamacije u roku od 8 dana od prijema računa.
+______________________________ ______________________________
+Fakturisao Odgovorno lice
+Sintetički dokument za demo. Sve firme, PIB/MB i osobe su izmišljeni. Strana: 1 / 1

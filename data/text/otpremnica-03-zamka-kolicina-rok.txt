@@ -1,0 +1,31 @@
+PRIMER / SPECIMEN – izmišljeni podaci
+DOBAVLJAČ
+Mlečni Dvor Promet d.o.o. (izmišljeno)
+Mlinska 44, 34000 Kragujevac
+PIB: 100000043 MB: 21000043
+Tekući račun: 000-0000000000003-00
+KUPAC
+Kafe „Plava Šolja“ d.o.o. (izmišljeno)
+Ulica Primera 12, 11000 Beograd
+PIB: 100000012 MB: 21000012
+OTPREMNICA br. MD-OTP-55271
+Datum
+otpremnice:
+Mesto isporuke: 26.11.2026 Veza na narudžbenicu
+NAR-PS-2026-0415
+br.:
+Vozač / reg. oznaka: Kafe „Plava Šolja“, Ulica Primera
+12, Beograd – magacin (ulaz iz
+dvorišta)
+Jovan J. (izmišljeno) /
+KG-000-BB
+R.br Šifra Naziv artikla JM Količina Rok trajanja Napomena
+1 MD-SL-0500 Pavlaka za šlag 35% 0,5 l kom 18 29.11.2026
+2 MD-MB-1000 Biljni napitak ovas 1 l kom 12 20.11.2026
+3 MD-JG-0180 Jogurt 2,8% 180 g kom 24 10.12.2026
+4 MD-MS-0250 Maslac 82% 250 g kom 10 15.02.2027
+Ukupno stavki: 4
+Robu primio u ispravnom stanju, osim ako nije drugačije navedeno u napomeni. Reklamacije na količinu primaju se pri prijemu.
+______________________________ ______________________________
+Robu izdao (M.P.) Robu primio (ime, prezime, potpis)
+Sintetički dokument za demo. Sve firme, PIB/MB i osobe su izmišljeni.

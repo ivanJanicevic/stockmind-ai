@@ -1,0 +1,35 @@
+PRIMER / SPECIMEN – izmišljeni podaci
+DOBAVLJAČ
+Zrno Plus Distribucija d.o.o. (izmišljeno)
+Industrijska zona bb, 21000 Novi Sad
+PIB: 100000029 MB: 21000029
+Tekući račun: 000-0000000000001-00
+KUPAC
+Kafe „Plava Šolja“ d.o.o. (izmišljeno)
+Ulica Primera 12, 11000 Beograd
+PIB: 100000012 MB: 21000012
+OTPREMNICA br. OT-2026-01197
+Datum
+otpremnice:
+Mesto isporuke: 26.11.2026 Veza na narudžbenicu
+Kafe „Plava Šolja“, Ulica Primera
+12, Beograd – magacin (ulaz iz
+dvorišta)
+br.:
+Vozač / reg. oznaka: NAR-PS-2026-0421
+Petar P. (izmišljeno) /
+NS-000-AA
+R.br Šifra Naziv artikla JM Količina Rok trajanja Napomena
+1 ZP-ESP-1000 Espresso kafa u zrnu 1 kg kom 20 26.05.2027
+2 ZP-DEK-1000 Espresso bez kofeina u zrnu 1 kg kom 2 30.04.2027
+3 ZP-DOM-0200 Domaća kafa mlevena 200 g kom 10 31.03.2027
+4 ZP-INS-0500 Instant kafa 500 g kom 2 30.09.2027
+5 ZP-KAK-1000 Topla čokolada prah 1 kg kom 3 31.12.2026
+6 ZP-SEC-0005 Šećer u kesicama 5 g kut 4 15.10.2028 1 kut = 1000 kom
+7 ZP-ZAS-0001 Zaslađivač u kesicama kut 1 30.06.2028 1 kut = 500 kom
+8 ZP-CAJ-0020 Čaj asortiman (20 kesica) kut 10 31.10.2028
+Ukupno stavki: 8
+Robu primio u ispravnom stanju, osim ako nije drugačije navedeno u napomeni. Reklamacije na količinu primaju se pri prijemu.
+______________________________ ______________________________
+Robu izdao (M.P.) Robu primio (ime, prezime, potpis)
+Sintetički dokument za demo. Sve firme, PIB/MB i osobe su izmišljeni.
