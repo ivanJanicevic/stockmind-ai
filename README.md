@@ -1,4 +1,4 @@
-# StockMind AI — café finance desk
+# StockMind AI — café/market finance desk
 
 **Agents in Finance · built on Mozaik**
 
