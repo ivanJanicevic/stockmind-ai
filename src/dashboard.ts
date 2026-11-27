@@ -187,7 +187,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 .gantt{display:grid;grid-template-columns:200px 1fr;gap:7px 14px;align-items:center}.gantt .nm{font-size:13px;color:#cfd8d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .track{position:relative;height:20px;border-radius:99px;background:rgba(255,255,255,.035)}.bar{position:absolute;top:4px;height:12px;border-radius:99px;min-width:6px}
 .bar.q{background:repeating-linear-gradient(135deg,rgba(255,255,255,.18) 0 3px,transparent 3px 7px)}.bar.run{animation:pulse 1s ease-in-out infinite alternate}@keyframes pulse{from{opacity:.55}to{opacity:1}}
-.flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}.flow .st{flex:1;min-width:120px;padding:12px 14px;border-radius:16px;background:var(--glass);border:1px solid var(--line);font-size:12px;color:var(--muted)}.flow .st b{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:500;font-size:13px;margin-bottom:4px}.flow .st.code{border-style:dashed}.flow .ar{align-self:center;color:var(--dim);font-size:18px}
+.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:1fr;gap:14px 26px}.flow .st{display:flex;flex-direction:column;min-width:0;min-height:138px;padding:12px 14px;border-radius:16px;background:var(--glass);border:1px solid var(--line);font-size:12px;color:var(--muted)}.flow .st b{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:500;font-size:13px;margin-bottom:4px}.flow .st.code{border-style:dashed}.flow .st:not(.end)::after{content:"→";position:absolute;right:-20px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:16px;opacity:1}
 .flow .st.par{background:linear-gradient(180deg,rgba(143,134,245,.10),transparent);border-color:rgba(143,134,245,.3)}
 .roles{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .role{padding:16px 18px;border-radius:20px;background:var(--glass);border:1px solid var(--line);border-top:3px solid var(--c);position:relative}
@@ -195,7 +195,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 .role .hd{display:flex;align-items:center;gap:12px;margin-bottom:10px;padding-right:58px}.role .hd b{display:block;font-weight:600}.role .hd span{font-size:12px;color:var(--muted)}
 .role .job{font-size:13px;margin-bottom:10px}.role dl{margin:0;font-size:12px;display:grid;grid-template-columns:62px 1fr;gap:4px 8px}.role dt{color:var(--dim)}.role dd{margin:0;color:#cfd8d4}
 .rb{position:absolute;top:14px;right:14px;padding:3px 10px;border-radius:99px;border:1px solid var(--c);color:var(--c);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;background:color-mix(in srgb,var(--c) 8%,transparent)}
-.flow .st{--c:var(--line2);position:relative;transition:opacity .2s,border-color .2s,box-shadow .2s}.flow .stt{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:600;color:var(--dim)}
+.flow .st{--c:var(--line2);position:relative;transition:opacity .2s,border-color .2s,box-shadow .2s}.flow .stt{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:8px;font-size:11px;font-weight:600;color:var(--dim)}
 .flow .st.s-active{border-color:var(--c);box-shadow:0 0 0 1px var(--c) inset,0 0 26px color-mix(in srgb,var(--c) 28%,transparent)}.flow .st.s-active .stt{color:var(--c)}.flow .st.s-active .stt::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c);animation:pulse 1s ease-in-out infinite alternate}
 .flow .st.s-queued{border-color:color-mix(in srgb,var(--c) 45%,transparent);background:repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 6px,transparent 6px 12px)}.flow .st.s-queued .stt{color:var(--muted)}
 .flow .st.s-wait{border-color:var(--wait);box-shadow:0 0 0 1px var(--wait) inset,0 0 26px rgba(245,196,81,.25)}.flow .st.s-wait .stt{color:var(--wait)}
@@ -224,8 +224,22 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 #tip .tt{font-weight:600;font-size:13px}#tip .lbl{color:var(--dim);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin:12px 0 5px}
 #tip pre{white-space:pre-wrap;word-break:break-word;margin:3px 0 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line);font:11px/1.45 ui-monospace,Menlo,monospace;color:#dfe7e3}
 #tip .ref{font:11px ui-monospace,Menlo,monospace;color:var(--mint);margin-top:8px;word-break:break-all}#tip .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px}#tip .kv span{color:var(--muted)}#tip .note{color:var(--muted);margin-top:10px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.kpi{padding:14px 18px;border-radius:18px;background:var(--panel);border:1px solid var(--line)}.kpi .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}.kpi .l{color:var(--muted);font-size:12px}
+.prio{list-style:none;margin:0;padding:0;counter-reset:p}.prio li{display:grid;grid-template-columns:28px 1fr;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line)}.prio li:first-child{border-top:0;padding-top:4px}
+.prio li::before{counter-increment:p;content:counter(p);grid-row:span 2;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:rgba(240,127,182,.14);color:var(--reviewer)}
+.prio .t{font-weight:500}.prio .w{color:var(--muted);font-size:13px}.prio .ids{margin-left:6px;color:var(--dim);font-size:12px}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.frow{border-top:1px solid var(--line)}.frow:first-child{border-top:0}.frow .fh{display:flex;align-items:center;gap:10px;padding:11px 6px;border-radius:12px;cursor:pointer}.frow .fh:hover{background:var(--glass)}
+.frow .fh .hl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.frow.open .fh .hl{white-space:normal}
+.frow .sd{width:8px;height:8px;border-radius:50%;flex:none}.sd.high{background:var(--held)}.sd.medium{background:var(--wait)}.sd.low{background:var(--dim)}
+.atag{font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);color:var(--c);white-space:nowrap;flex:none}
+.chev{color:var(--dim);transition:transform .15s;flex:none}.frow.open .chev{transform:rotate(90deg)}
+.frow .fb{padding:0 6px 12px 24px;font-size:13px}.frow .fb .x{color:var(--muted)}.frow .fb .a{color:var(--mint);margin-top:4px}
+.chips.sm{margin:0}.chips.sm .chip{padding:5px 12px;font-size:12px}
+.linkbtn{background:none;border:0;color:var(--muted);font-size:12px;padding:0;text-decoration:underline dotted}
+@media(max-width:1100px){.kpis{grid-template-columns:1fr 1fr}}
 footer{color:var(--dim);font-size:12px;margin-top:26px}
-@media(max-width:1100px){.grid,.row2,.two,.mini{grid-template-columns:1fr}.meta{grid-template-columns:1fr 1fr}.app{grid-template-columns:70px 1fr}}
+@media(max-width:1100px){.flow{grid-template-columns:repeat(3,minmax(0,1fr))}.flow .st::after{display:none}.grid,.row2,.two,.mini{grid-template-columns:1fr}.meta{grid-template-columns:1fr 1fr}.app{grid-template-columns:70px 1fr}}
 </style></head>
 <body><div class="app">
 <aside class="side">
@@ -423,17 +437,16 @@ function flowStrip(){
   const match=read===n?{st:'done',text:n+' / '+n+' pairs matched · '+held+' held'}:read?{st:'active',text:read+' / '+n+' pairs matched'}:{st:pairsBusy==='off'?'off':'queued',text:'waits for both clerks of a pair'};
   const human=waiting?{st:'wait',text:waiting+' waiting for you'}:appr?{st:'done',text:appr+' approved by you'}:read===n?{st:'off',text:'nothing needs approval'}:{st:'off',text:'waits for the decisions'};
   const allMatched=read===n,claims=stage(['claims'],allMatched?'not needed: nothing held':'starts when a pair is held');
-  const st=(k,c,t,d,cls,x)=>'<div class="st s-'+x.st+' '+(cls||'')+'" style="--c:'+c+'"><b>'+rico(k,c)+t+'</b>'+d+'<div class="stt">'+esc(x.text)+'</div></div>',ar='<span class="ar">→</span>';
+  const st=(k,c,t,d,cls,x)=>'<div class="st s-'+x.st+' '+(cls||'')+'" style="--c:'+c+'"><b>'+rico(k,c)+t+'</b>'+d+'<div class="stt">'+esc(x.text)+'</div></div>',ar='';
   return '<div class="flow">'+st('docs','var(--muted)','Documents',n+' invoices + '+n+' delivery notes','',{st:'done',text:'loaded from data/'})+ar+
     st('invoice',colorOf('invoice'),'Clerks, in pairs','invoice clerk + receiving clerk read every pair in parallel','par',stage(['invoice','note'],'starting…'))+ar+
     st('code','var(--text)','Three-way match','code, not an agent: invoice vs delivery vs agreed price','code',match)+ar+
     st('claims',colorOf('claims'),'Claims writer','only for held invoices','',claims)+ar+
     st('reviewer',colorOf('reviewer'),'Reviewer','priorities for the week','',stage(['reviewer'],'starts when every specialist is done'))+ar+
-    st('you','var(--wait)','You','approve clean invoices above '+rsd(S.limitRsd),'',human)+'</div>'+
-  '<div class="flow" style="margin-top:8px">'+st('code','var(--text)','Code computes rows','stock, demand, margins, costs from data/','code',{st:'done',text:'computed before t=0'})+ar+
+    st('you','var(--wait)','You','approve clean invoices above '+rsd(S.limitRsd),'end',human)+st('code','var(--text)','Code computes rows','stock, demand, margins, costs from data/','code',{st:'done',text:'computed before t=0'})+ar+
     st('stock',colorOf('stock'),'3 analysts','stock, sales, margin and cost, all from t=0','par',stage(['stock','sales','margin'],'starting…'))+ar+
     st('planner',colorOf('planner'),'Inventory planner','once every delivery note is verified','',stage(['planner'],'waits for the last delivery note'))+ar+
-    st('reviewer',colorOf('reviewer'),'Reviewer','sees all of it together','',stage(['reviewer'],'starts when every specialist is done'))+'</div>';
+    st('reviewer',colorOf('reviewer'),'Reviewer','sees all of it together','end',stage(['reviewer'],'starts when every specialist is done'))+'</div>';
 }
 function agents(){
   const end=Math.max(S.elapsedMs,1),pct=(x)=>(100*x/end).toFixed(2)+'%',order={analyst:0,invoice:1,note:1,claims:2,reviewer:3};
@@ -453,11 +466,34 @@ function agents(){
   '<div class="card"><div class="ch"><h3>Who does what</h3><span class="muted" style="font-size:12px">answered / total, per role</span></div><div class="roles">'+cards+'</div></div>'+
   '<div class="card"><div class="ch"><h3>Timeline</h3><div class="legend">'+ROLES.filter((r,i,a)=>a.findIndex(x=>x[2]===r[2])===i).map(r=>'<span><i style="background:var(--'+r[2]+')"></i>'+(r[2]==='analyst'?'Analysts':r[1])+'</span>').join('')+'<span><i style="background:repeating-linear-gradient(135deg,rgba(255,255,255,.4) 0 2px,transparent 2px 4px)"></i>queued for the rate limit</span></div></div><div class="gantt">'+g+'</div><div class="axis">'+[0,.25,.5,.75,1].map(f=>'<span>'+(f*end/1000).toFixed(0)+' s</span>').join('')+'</div></div></div>';
 }
+// Insights: the reviewer's priorities first, then one findings list sorted by
+// severity. Rows are one line; details open on click (state kept across refreshes).
+let insF='all',insRej=false,insSum=false;const insOpen=new Set();
+function togF(k){insOpen.has(k)?insOpen.delete(k):insOpen.add(k);render();}
+const AKEY={stock:'analyst',sales:'analyst',margin:'analyst',planning:'planner'};
+const ANAME={stock:'Stock',sales:'Sales',margin:'Margin & cost',planning:'Inventory'};
 function insights(){
-  const rv=S.review?'<div class="card"><div class="ch"><h3>Reviewer — priorities this week</h3><span class="badge b-ready">checks the specialists against each other</span></div><p style="margin-top:0">'+esc(S.review.summary)+'</p>'+S.review.actions.map((a,i)=>'<div class="find"><div class="h"><span class="sev low">'+(i+1)+'</span>'+esc(a.action)+'</div><div class="x">'+esc(a.why)+' <span class="dim">('+a.itemIds.map(id=>{const it=(S.reviewItems||{})[id];return it?cite(esc(id),{t:id+' — '+it.label,s:it.sources,n:'The reviewer may only use figures from the items it cites; checked by code.'}):esc(id);}).join(', ')+')</span></div></div>').join('')+'</div>':'<div class="card"><div class="ch"><h3>Reviewer</h3></div><div class="empty">'+esc(S.reviewNote??'starts when every specialist has finished…')+'</div></div>';
-  return '<div class="head"><div><h1>Insights</h1><div class="sub">Analysts interpret code-computed rows; any figure not in the cited row is rejected.</div></div></div><div class="col">'+rv+'<div class="cards">'+S.analyses.map(a=>'<div class="card"><div class="ch"><h3>'+esc(a.agent)+'</h3><span class="muted" style="font-size:12px">'+(a.done?(a.error?'<span class="bad">failed</span>':a.accepted.length+' accepted · '+a.rejected.length+' rejected'):'working…')+'</span></div><div class="dim" style="font-size:12px;margin:-8px 0 6px">'+esc(a.title)+'</div>'+
-    (a.accepted.length?a.accepted.map(f=>'<div class="find"><div class="h"><span class="sev '+f.severity+'">'+f.severity+'</span>'+esc(f.headline)+srcDot({t:a.agent+' cites row '+f.id,row:f.row,s:f.row&&f.row.sources,a:f.row&&f.row.code!=null?f.row.code:null,n:'Every number in this finding must appear in this row: checked by code before it is shown.'})+'</div><div class="x">'+esc(f.explanation)+'</div><div class="a">→ '+esc(f.action)+' <span class="dim">('+cite(esc(f.id),{t:a.agent+' cites row '+f.id,row:f.row,s:f.row&&f.row.sources,a:f.row&&f.row.code!=null?f.row.code:null,n:'Every number in this finding must appear in this row: checked by code before it is shown.'})+')</span></div></div>').join(''):'<div class="empty">'+(a.done?'no findings accepted':'waiting for the agent…')+'</div>')+
-    (a.rejected.length?'<div class="dim" style="font-size:12px;margin-top:8px">🚫 '+a.rejected.map(r=>esc(r.reason)).join(' · ')+'</div>':'')+'</div>').join('')+'</div></div>';
+  const sev={high:0,medium:1,low:2},all=S.analyses.flatMap(a=>a.accepted.map(f=>({f:f,a:a}))).sort((x,y)=>sev[x.f.severity]-sev[y.f.severity]);
+  const rejected=S.analyses.flatMap(a=>a.rejected.map(r=>({r:r,a:a}))),done=S.analyses.filter(a=>a.done).length,high=all.filter(x=>x.f.severity==='high').length;
+  const kpi=(v,l,c)=>'<div class="kpi"><div class="v"'+(c?' style="color:'+c+'"':'')+'>'+v+'</div><div class="l">'+l+'</div></div>';
+  const kpis='<div class="kpis">'+kpi(all.length,'findings accepted')+kpi(high,'high priority',high?'var(--held)':'')+kpi(rejected.length,'rejected by the source guard')+kpi(done+' / '+S.analyses.length,S.review?'analysts done · reviewer done':'analysts done · reviewer '+(S.reviewNote?'skipped':'pending'))+'</div>';
+  const rv=S.review?'<div class="card"><div class="ch"><h3>This week’s priorities</h3><span class="muted" style="font-size:12px">Reviewer · joins the specialists’ results</span></div>'+
+    '<div class="muted '+(insSum?'':'clamp')+'" style="font-size:13px;margin:-4px 0 6px">'+esc(S.review.summary)+'</div>'+(S.review.summary.length>220?'<button class="linkbtn" onclick="insSum=!insSum;render()">'+(insSum?'less':'more')+'</button>':'')+
+    '<ol class="prio" style="margin-top:8px">'+S.review.actions.map(x=>'<li><div class="t">'+esc(x.action)+'<span class="ids">'+x.itemIds.map(id=>{const it=(S.reviewItems||{})[id];return it?cite(esc(id),{t:id+' — '+it.label,s:it.sources,n:'The reviewer may only use figures from the items it cites; checked by code.'}):esc(id);}).join(' ')+'</span></div><div class="w">'+esc(x.why)+'</div></li>').join('')+'</ol></div>'
+    :'<div class="card"><div class="ch"><h3>This week’s priorities</h3></div><div class="empty">'+esc(S.reviewNote??'The reviewer starts when every specialist has finished…')+'</div></div>';
+  const n=(k)=>k==='all'?all.length:k==='high'?high:all.filter(x=>x.a.key===k).length;
+  const chips='<div class="chips sm">'+[['all','All'],['high','High']].concat(S.analyses.map(a=>[a.key,ANAME[a.key]||a.agent])).map(([k,t])=>{const a=S.analyses.find(x=>x.key===k);return '<button class="chip '+(insF===k?'on':'')+'" onclick="insF=this.dataset.k;render()" data-k="'+k+'">'+t+'<span class="n">'+(a&&!a.done?'…':n(k))+'</span></button>';}).join('')+'</div>';
+  const shown=all.filter(x=>insF==='all'||(insF==='high'?x.f.severity==='high':x.a.key===insF));
+  const rows=shown.map(({f,a})=>{const k=a.key+'|'+f.id,open=insOpen.has(k),c='var(--'+(AKEY[a.key]||'analyst')+')';
+    const src={t:a.agent+' cites row '+f.id,row:f.row,s:f.row&&f.row.sources,a:f.row&&f.row.code!=null?f.row.code:null,n:'Every number in this finding must appear in this row: checked by code before it is shown.'};
+    return '<div class="frow '+(open?'open':'')+'"><div class="fh" data-k="'+esc(k)+'" onclick="togF(this.dataset.k)"><span class="sd '+f.severity+'" title="'+f.severity+'"></span><span class="hl">'+esc(f.headline)+'</span><span class="atag" style="--c:'+c+'">'+esc(ANAME[a.key]||a.agent)+'</span>'+srcDot(src)+'<span class="chev">›</span></div>'+
+      (open?'<div class="fb"><div class="x">'+esc(f.explanation)+'</div><div class="a">→ '+esc(f.action)+' <span class="dim">('+cite(esc(f.id),src)+')</span></div></div>':'')+'</div>';}).join('');
+  const working=S.analyses.filter(a=>!a.done),failed=S.analyses.filter(a=>a.error);
+  const notes=(working.length?'<div class="dim" style="font-size:12px;padding:8px 6px">Still working: '+working.map(a=>esc(a.agent)).join(', ')+'…</div>':'')+failed.map(a=>'<div class="bad" style="font-size:12px;padding:8px 6px">'+esc(a.agent)+' failed: '+esc(a.error)+' — the code-computed rows are still in out/review.md.</div>').join('');
+  const rej=rejected.length?'<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><button class="linkbtn" onclick="insRej=!insRej;render()">🚫 '+rejected.length+' finding'+(rejected.length===1?'':'s')+' rejected by the source guard '+(insRej?'▾':'▸')+'</button>'+
+    (insRej?'<div style="font-size:12px;margin-top:6px">'+rejected.map(({r,a})=>'<div class="muted" style="padding:3px 0">'+esc(ANAME[a.key]||a.agent)+': '+esc(r.reason)+'</div>').join('')+'</div>':'')+'</div>':'';
+  return '<div class="head"><div><h1>Insights</h1><div class="sub">Analysts interpret rows computed by code. Hover ⓘ to see the source of any finding; click a row for details.</div></div></div>'+kpis+
+    '<div class="col">'+rv+'<div class="card"><div class="ch"><h3>Findings</h3>'+chips+'</div>'+(rows||'<div class="empty">'+(all.length?'no finding in this filter':'waiting for the analysts…')+'</div>')+notes+rej+'</div></div>';
 }
 function inventory(){
   const P=S.planning;const head='<div class="head"><div><h1>Inventory</h1><div class="sub">Lots from verified delivery notes · stock is a book estimate (deliveries − recipe use), not a count.</div></div></div>';
