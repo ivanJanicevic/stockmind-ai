@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 
 import {
   defineRuntime,
@@ -14,7 +14,7 @@ import { HOSTED_NETWORK, readInviteLink } from '@jigjoy/mozaik-network/invite-li
 import { NetworkClient } from '@jigjoy/mozaik-network/network-client';
 
 import { loadConfig, parseApprovals, type Config } from './config.js';
-import { DATA_DIR, loadDataset, loadPlanningParams } from './data/load.js';
+import { DATA_DIR, FILES, loadDataset, loadPlanningParams } from './data/load.js';
 import { periodResult, priceChanges, round2, stockCheck, unitMargins, weeklyTrend } from './analytics.js';
 import {
   blockingFailures,
@@ -46,7 +46,7 @@ import { parseVerification, unsourcedFigures } from './parsing.js';
 import { WhenAnyAnswer, WhenInferenceCompleted, answerText } from './events.js';
 import { buildPaymentCsv, type PaymentOrder } from './payments.js';
 import { buildReport, DISCLAIMER, rsd, type AnalystResult, type PlanningSection, type TimelineEntry } from './report.js';
-import { startDashboard } from './dashboard.js';
+import { pageHtml, startDashboard } from './dashboard.js';
 import {
   CLAIMS_WRITER,
   CLAIM_OUTPUT,
@@ -96,6 +96,10 @@ const approved = new Set(parseApprovals(process.argv.slice(2)));
 const approvalNotes = new Map<string, string>([...approved].map((id) => [id, 'command line (--approve)']));
 // `npm run demo` (--dashboard): live page on DASHBOARD_PORT (default 3000).
 const dashboardWanted = process.argv.includes('--dashboard');
+// `npm run record` (--record): saves every state change of this real run to
+// docs/demo/ so GitHub Pages can replay it without a model or API key.
+const recording = process.argv.includes('--record');
+const DEMO_DIR = 'docs/demo';
 let dashboardUrl: string | null = null;
 
 // ---------------------------------------------------------------------------
@@ -113,6 +117,29 @@ const comparison = periodComparison(ds);
 const salesRows: Row[] = [...trendRows, ...comparison.rows.filter((r) => r.flag !== 'too few sales'), ...profitRows];
 const marginRows: Row[] = [...priceChanges(ds), ...unitMargins(ds).filter((r) => r.flagged), ...pnl, ...costChanges];
 const planningParams = loadPlanningParams();
+
+// Chart data for the dashboard, computed from data/ (POS export, costs).
+const chartData = (() => {
+  const periods = salesByPeriod(ds);
+  const sumBy = (period: 'day' | 'week', key: (r: (typeof periods)[number]) => string) => {
+    const m = new Map<string, { key: string; days: number; net: number }>();
+    for (const r of periods.filter((x) => x.period === period)) {
+      const k = key(r);
+      const e = m.get(k) ?? { key: k, days: r.days, net: 0 };
+      e.net += r.netRevenue;
+      m.set(k, e);
+    }
+    return [...m.values()].map((e) => ({ ...e, net: round2(e.net) }));
+  };
+  const lastMonth = ds.costs.map((c) => c.month).sort().at(-1)!;
+  return {
+    weeks: sumBy('week', (r) => r.key),
+    days: sumBy('day', (r) => r.key),
+    costMonth: lastMonth,
+    costs: ds.costs.filter((c) => c.month === lastMonth).map((c) => ({ category: c.category, net: c.net })),
+    sources: [FILES.sales, FILES.costs],
+  };
+})();
 const FLAGS = new Set(['rising', 'falling', 'stockout_risk', 'overstock', 'insufficient_data', 'expired_on_arrival', 'expired_unsold', 'at_risk']);
 const isFlagged = (r: Row) =>
   r.flagged === true || r.oversold === true || /^(PRICE|PNL|COST|PROMO)-/.test(r.id) || FLAGS.has(r.flag ?? '') || FLAGS.has(r.status ?? '') || (r.id.startsWith('PROFIT-') && (r.rank ?? 99) <= 3);
@@ -232,6 +259,7 @@ function run(agent: Agent, message: string, output: OutputFormat): void {
       entry.status = 'running';
     }
     console.log(`${stamp()} [${label(agent.getId())}] started`);
+    recordFrame();
     Promise.resolve()
       .then(() =>
         runLoop(agent.getId(), message, {
@@ -456,6 +484,7 @@ function dispatch(info: AgentInfo, answer: string): void {
     }
   }
   maybeStartReviewer();
+  recordFrame(true);
   finishIfDone();
 }
 
@@ -532,6 +561,7 @@ function snapshot(): unknown {
     network: networkStatus,
     limitRsd: config.approvalLimitRsd,
     agentsTotal: agents.size,
+    charts: chartData,
     timeline: [...state.timeline.values()].filter((t) => t.status !== 'idle'),
     cases: state.cases.map((c) => {
       const read = invoiceIn.has(c.id) && noteIn.has(c.id);
@@ -594,6 +624,34 @@ function snapshot(): unknown {
         }
       : null,
   };
+}
+
+const frames: { t: number; s: unknown }[] = [];
+let lastFrameJson = '';
+let lastFrameAt = -Infinity;
+function recordFrame(force = false): void {
+  if (!recording) return;
+  const t = elapsed();
+  if (!force && t - lastFrameAt < 300) return;
+  const s = snapshot();
+  const json = JSON.stringify(s);
+  if (json === lastFrameJson) return;
+  frames.push({ t, s });
+  lastFrameJson = json;
+  lastFrameAt = t;
+}
+
+function writeReplay(): void {
+  recordFrame(true);
+  mkdirSync(`${DEMO_DIR}/doc/fakture`, { recursive: true });
+  mkdirSync(`${DEMO_DIR}/doc/otpremnice`, { recursive: true });
+  for (const c of state.cases) {
+    copyFileSync(`${DATA_DIR}fakture/${c.invoiceFile.replace('.txt', '.pdf')}`, `${DEMO_DIR}/doc/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`);
+    copyFileSync(`${DATA_DIR}otpremnice/${c.noteFile.replace('.txt', '.pdf')}`, `${DEMO_DIR}/doc/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`);
+  }
+  writeFileSync(`${DEMO_DIR}/index.html`, pageHtml('replay'));
+  writeFileSync(`${DEMO_DIR}/replay.json`, JSON.stringify({ recordedAt: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC', model: config.models.slice(0, modelIndex + 1).join(' → '), frames }));
+  console.log(`Replay: ${DEMO_DIR}/index.html + replay.json (${frames.length} frames) — commit docs/demo/ and enable GitHub Pages.`);
 }
 
 // Human approval from the dashboard. Same rule as --approve: only an invoice
@@ -690,6 +748,7 @@ function finish(exitCode: number): void {
   finished = true;
   const { decisions, orders, paymentFile, paymentTotal, reportFile, recommendationsFile } = writeOutputs();
   const planning = state.planning!;
+  if (recording) writeReplay();
 
   console.log('');
   for (const c of state.cases) {

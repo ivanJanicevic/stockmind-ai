@@ -2,6 +2,8 @@
 
 **Agents in Finance · built on Mozaik**
 
+**▶ [Live demo: replay of a real run](https://ivanjanicevic.github.io/stockmind-ai/demo/)** · [Slides](https://ivanjanicevic.github.io/stockmind-ai/presentation.html). No install or API key needed. The replay plays back a recorded real run in the dashboard, and you can open any invoice and try the human approval (simulated in your browser).
+
 A small café's owner gets supplier invoices, delivery notes, a POS export and monthly bills, and has no finance team to check them. Before paying, someone should ask:
 - Did we actually receive what we're invoiced for, at the agreed price?
 - Is anything expired?
@@ -175,6 +177,13 @@ Payment draft: out/payment-draft.csv (1 orders, 35.102,80 RSD)
 - Joining runs in the background with a 15 s timeout and can never stop a run. The report shows the Network status.
 
 ## Demo material
+
+**Publishing the replay demo** (GitHub Pages, no hosting cost, no API key on the site):
+1. `npm run record` does one real run (about 24 model calls) and writes `docs/demo/replay.json`, with every state change of the run, plus copies of the PDFs.
+2. Commit `docs/` and push.
+3. On GitHub, go to Settings → Pages → Deploy from branch → `main` / `/docs`.
+
+The site is `docs/index.html` (landing page) → `docs/demo/` (the dashboard in replay mode). Until a recording exists, the demo page says so. It never shows made-up data.
 
 - `docs/presentation.html`: slides; open it in a browser and use ← / →.
 - `docs/video-script.md`: a 2-minute recording script, synced to the slides and the live dashboard.
