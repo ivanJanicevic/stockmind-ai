@@ -5,26 +5,14 @@
 //
 //   npm run audit
 //
-// Record findings first: "npm run procurement -- <faktura>" and "npm run stock".
+// Record findings first: "npm run procurement -- <faktura>", "npm run stock", "npm run sales".
 
 import 'dotenv/config';
 
-import path from 'node:path';
-
 import { loadConfig } from '../../config.js';
-import { openDatabase } from '../../db/database.js';
 import { findingsWithStatus } from '../../db/findings.js';
-import { readRecipes } from '../../domain/recipes.js';
-import { readSales } from '../../domain/sales.js';
 import { limitModelCalls } from '../../model-rate-limit.js';
-import { connectPeer } from '../../network/connect.js';
-import { DATA_DIR } from '../document/process-document.js';
-import { runAgent } from '../run-agent.js';
-import { auditTask, createAuditorAgent } from './agent.js';
-import { createFindingAuditor, type AuditContext } from './checks.js';
-import { auditMessage } from './messages.js';
-import { returnToAgents, type ReturnResult } from './return-to-agent.js';
-import { AUDITOR_AGENT, createAuditorTools, type Verdict } from './tools.js';
+import { loadContext, runAudit } from '../flows.js';
 
 function fail(message: string): never {
   console.error(`\n[error] ${message}`);
@@ -46,57 +34,18 @@ const config = (() => {
 })();
 process.on('unhandledRejection', (error) => fail(describeError(error)));
 limitModelCalls(config.requestsPerMinute);
-const model = config.models[0]!;
 
-const db = openDatabase();
-const ctx: AuditContext = {
-  db,
-  recipes: readRecipes(DATA_DIR),
-  sales: readSales(path.join(DATA_DIR, 'promet_2026-11-26_do_2026-12-25.csv')),
-  dataDir: DATA_DIR,
-};
-const auditor = createFindingAuditor(ctx);
-
-/** One Auditor loop over the findings waiting now. Returns the verdicts it recorded. */
-async function auditRound(label: string): Promise<Verdict[]> {
-  const verdicts: Verdict[] = [];
-  const agent = createAuditorAgent(createAuditorTools({ db, audit: auditor.audit, onVerdict: (v) => verdicts.push(v) }));
-  await runAgent(agent, auditTask(), model, label);
-  return verdicts;
-}
-
-const waiting = findingsWithStatus(db, 'CEKA');
+const ctx = loadContext(config.models[0]!);
+const waiting = findingsWithStatus(ctx.db, 'CEKA');
 if (waiting.length === 0) {
-  console.log('No findings are waiting for the Auditor. Record some first: npm run procurement, npm run stock.');
+  console.log('No findings are waiting for the Auditor. Record some first: npm run procurement, npm run stock, npm run sales.');
   process.exit(0);
 }
 console.log(`[db] ${waiting.length} finding(s) waiting for the Auditor`);
 
-// 1. The Auditor checks every waiting finding.
-const first = await auditRound(AUDITOR_AGENT);
-
-// 2. Rejected findings go back to their agent once; what the agents record again is checked once more.
-const rejected = first.filter((v) => v.verdict === 'ODBIJEN');
-let returned: ReturnResult | undefined;
-let second: Verdict[] = [];
-if (rejected.length > 0) {
-  console.log(`\n[auditor] ${rejected.length} rejected; returning them to their agents once`);
-  returned = await returnToAgents(ctx, rejected, model, auditor.latestSaleDate);
-  if (findingsWithStatus(db, 'CEKA').length > 0) {
-    console.log('\n[auditor] checking the corrected findings');
-    second = await auditRound(`${AUDITOR_AGENT} (ponovo)`);
-  }
+const outcome = await runAudit(ctx);
+if (outcome.stillWaiting.length > 0) {
+  console.log(`\n[warning] still without a verdict: ${outcome.stillWaiting.map((id) => `#${id}`).join(', ')}`);
 }
-
-const left = findingsWithStatus(db, 'CEKA');
-if (left.length > 0) console.log(`\n[warning] still without a verdict: ${left.map((f) => `#${f.id}`).join(', ')}`);
-
-// 3. Post the verdicts in the network.
-const message = auditMessage(first, returned, second);
-console.log(`\n${message}`);
-
-const session = await connectPeer({ name: AUDITOR_AGENT, role: 'agent', policy: { rules: [] } });
-await session.send(message);
-await session.leave();
-console.log(`\n[network] "${AUDITOR_AGENT}" posted ${first.length + second.length} verdict(s) in network ${session.networkId}`);
+console.log(`\n${outcome.message}`);
 process.exit(0);

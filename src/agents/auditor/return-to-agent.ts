@@ -6,6 +6,8 @@ import { checkStock, stockDateOfKey } from '../../domain/stock.js';
 import { createProcurementAgent, procurementRetryTask } from '../procurement/agent.js';
 import { createProcurementTools, PROCUREMENT_AGENT } from '../procurement/tools.js';
 import { runAgent } from '../run-agent.js';
+import { createSalesAgent, salesRetryTask } from '../sales/agent.js';
+import { createSalesTools, SALES_AGENT, salesIssueKey, salesIssues } from '../sales/tools.js';
 import { createStockAgent, stockRetryTask } from '../stock/agent.js';
 import { createStockTools, STOCK_AGENT } from '../stock/tools.js';
 import type { AuditContext } from './checks.js';
@@ -84,7 +86,30 @@ export async function returnToAgents(
     runs.push(runAgent(agent, procurementRetryTask(invoiceNumber, list), model, `${PROCUREMENT_AGENT} (ispravka)`));
   }
 
-  for (const { finding } of findings.filter((x) => x.finding.agent !== STOCK_AGENT && x.finding.agent !== PROCUREMENT_AGENT)) {
+  // Prodaja: one run per date, with the issue ids check_sales_and_profit will give.
+  const salesByDate = new Map<string, { issueId: string; name: string; reason: string; findingId: number }[]>();
+  for (const { finding, reason } of findings.filter((x) => x.finding.agent === SALES_AGENT)) {
+    const asOf = stockDateOfKey(finding.kljuc ?? '') ?? latestSaleDate;
+    const issues = salesIssues(ctx, asOf);
+    const index = issues.findIndex((i) => salesIssueKey(i) === finding.kljuc);
+    if (index < 0) {
+      result.notReturned.push({ findingId: finding.id, why: `podaci na dan ${asOf} ga više ne daju` });
+      continue;
+    }
+    const issue = issues[index]!;
+    const name = issue.kind === 'price' ? `${issue.difference.name}, ${issue.invoice.broj}` : issue.drop.name;
+    const list = salesByDate.get(asOf) ?? [];
+    list.push({ issueId: `P${index + 1}`, name, reason, findingId: finding.id });
+    salesByDate.set(asOf, list);
+  }
+  for (const [asOf, list] of salesByDate) {
+    result.returned.push(...list.map((x) => x.findingId));
+    const agent = createSalesAgent(createSalesTools(ctx));
+    runs.push(runAgent(agent, salesRetryTask(asOf, list), model, `${SALES_AGENT} (ispravka)`));
+  }
+
+  const known = [STOCK_AGENT, PROCUREMENT_AGENT, SALES_AGENT];
+  for (const { finding } of findings.filter((x) => !known.includes(x.finding.agent))) {
     result.notReturned.push({ findingId: finding.id, why: `agent ${finding.agent} još ne prima vraćene nalaze` });
   }
 

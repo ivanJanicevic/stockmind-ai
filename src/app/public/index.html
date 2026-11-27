@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockMind – back office kafića</title>
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1f1e; --muted: #6b706d; --line: #e3e4df;
+    --accent: #1f5f4a; --accent-soft: #e3efe9; --warn: #9a5b00; --warn-soft: #fbf0dc;
+    --bad: #a3271d; --bad-soft: #f8e3e0; --ok: #1f6b3a; --ok-soft: #e2f1e6; --wait: #4a5a8a; --wait-soft: #e6e9f4;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .controls { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+  button:hover { border-color: #c9cbc4; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #184b3a; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=date], input[type=number], select { font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: #fff; }
+  input[type=number] { width: 80px; text-align: right; }
+  nav { display: flex; gap: 2px; padding: 0 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 14px; color: var(--muted); background: none; }
+  nav button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  main { padding: 20px 24px 60px; max-width: 1400px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 14px; margin: 0 0 12px; }
+  .row { display: flex; gap: 16px; align-items: flex-start; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: #fafaf7; }
+  tr.selected td { background: var(--accent-soft); }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.wait { background: var(--wait-soft); color: var(--wait); }
+  .chip.plain { background: #eeeeea; color: var(--muted); }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; min-width: 150px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  /* timeline */
+  .lanes { display: grid; grid-template-columns: 260px 1fr; gap: 6px 14px; align-items: center; }
+  .lane-label { font-size: 13px; cursor: pointer; }
+  .lane-label .mono { color: var(--muted); }
+  .track { position: relative; height: 26px; background: #f0f0ec; border-radius: 5px; cursor: pointer; }
+  .bar { position: absolute; top: 3px; height: 20px; border-radius: 4px; background: var(--accent); color: #fff; font-size: 11px; padding: 2px 6px; white-space: nowrap; overflow: hidden; min-width: 4px; }
+  .bar.running { background: repeating-linear-gradient(45deg, #2b7a60, #2b7a60 8px, #1f5f4a 8px, #1f5f4a 16px); }
+  .bar.failed { background: var(--bad); }
+  .bar .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.55); }
+  .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; grid-column: 2; }
+  .log { max-height: 420px; overflow: auto; }
+  .log div { padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+  .log .t { color: var(--muted); font-family: var(--mono); margin-right: 8px; }
+  .detail h3 { font-size: 15px; margin: 0 0 6px; }
+  .checks div { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .checks .mark { display: inline-block; width: 18px; font-weight: 700; }
+  .checks .mark.ok { color: var(--ok); } .checks .mark.bad { color: var(--bad); }
+  a.ref { color: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+  .source { background: #fafaf7; border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-top: 8px; font-family: var(--mono); font-size: 12px; overflow-x: auto; }
+  .source .hl { background: #fff2b8; }
+  .source span.n { color: var(--muted); display: inline-block; width: 42px; }
+  .toast { position: fixed; right: 20px; bottom: 20px; background: var(--ink); color: #fff; padding: 10px 14px; border-radius: 8px; max-width: 460px; display: none; }
+  .toast.bad { background: var(--bad); }
+  .disclaimer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  .hidden { display: none; }
+  .empty { color: var(--muted); padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>StockMind</h1>
+    <div class="sub">Back office kafića „Plava Šolja": agenti na Mozaik runtime-u · izmišljeni podaci</div>
+  </div>
+  <div class="controls">
+    <label class="small muted">Na dan <input type="date" id="asOf"></label>
+    <button class="primary" id="runFlow" title="Nabavka, Zalihe i Prodaja paralelno, pa Auditor">Pokreni ceo tok</button>
+    <button data-agent="stock">Zalihe</button>
+    <button data-agent="sales">Prodaja</button>
+    <button data-agent="audit">Auditor</button>
+    <span id="jobState" class="small muted"></span>
+  </div>
+</header>
+<nav>
+  <button data-tab="flow" class="active">Tok agenata</button>
+  <button data-tab="docs">Dokumenti i prijem</button>
+  <button data-tab="findings">Nalazi</button>
+  <button data-tab="stock">Zalihe</button>
+</nav>
+<main>
+  <!-- Timeline -->
+  <section id="tab-flow">
+    <div class="stats" id="stats" style="margin-bottom:16px"></div>
+    <div class="panel">
+      <div class="row" style="align-items:center;margin-bottom:10px">
+        <h2 class="grow" style="margin:0">Loop-ovi agenata <span class="muted small">(svaka traka je jedan Mozaik loop; trake koje se preklapaju rade paralelno)</span></h2>
+        <button id="clearTimeline" class="small">Prikaži samo nove</button>
+      </div>
+      <div id="lanes" class="lanes"></div>
+    </div>
+    <div class="row">
+      <div class="panel grow">
+        <h2 id="loopTitle">Dnevnik</h2>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Documents -->
+  <section id="tab-docs" class="hidden">
+    <div class="panel">
+      <div class="row" style="align-items:center;margin-bottom:10px">
+        <h2 class="grow" style="margin:0">PDF dokumenti</h2>
+        <button class="primary" id="readAll" title="Document agenti čitaju sve PDF-ove paralelno">Pročitaj sve dokumente</button>
+      </div>
+      <table>
+        <thead><tr><th>Fajl</th><th>Vrsta</th><th>Broj</th><th>Dobavljač</th><th>Status</th><th>Prijemnica</th><th></th></tr></thead>
+        <tbody id="docRows"></tbody>
+      </table>
+    </div>
+    <div class="panel hidden" id="confirmPanel"></div>
+  </section>
+
+  <!-- Findings -->
+  <section id="tab-findings" class="hidden">
+    <div class="row">
+      <div class="panel grow">
+        <div class="row" style="align-items:center;margin-bottom:10px">
+          <h2 class="grow" style="margin:0">Nalazi agenata</h2>
+          <select id="fStatus"><option value="">svi statusi</option><option>CEKA</option><option>POTVRDJEN</option><option>ODBIJEN</option></select>
+          <select id="fAgent"><option value="">svi agenti</option><option>Nabavka</option><option>Zalihe</option><option>Prodaja</option></select>
+        </div>
+        <table>
+          <thead><tr><th>#</th><th>Agent</th><th>Vrsta</th><th>Auditor</th><th class="num">Očekivano</th><th class="num">Stvarno</th><th class="num">RSD bez PDV</th><th>Objašnjenje</th></tr></thead>
+          <tbody id="findingRows"></tbody>
+        </table>
+      </div>
+      <div class="panel detail" id="findingDetail" style="width:38%;min-width:340px;max-width:480px;flex:none"><div class="empty">Izaberi nalaz da vidiš provere i izvore.</div></div>
+    </div>
+  </section>
+
+  <!-- Stock -->
+  <section id="tab-stock" class="hidden">
+    <div class="panel">
+      <h2 id="stockTitle">Pregled zaliha</h2>
+      <div id="stockNotes" class="small muted" style="margin-bottom:8px"></div>
+      <table>
+        <thead><tr><th>Rok</th><th class="num">Dana</th><th>Status</th><th class="num">Primljeno</th><th class="num">Na stanju</th><th>JM</th><th>Artikal</th><th>Prijemnica</th><th>Izvor</th></tr></thead>
+        <tbody id="stockRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="disclaimer">Svi podaci su izmišljeni. Brojeve računa kod, a ne model; svaki broj ima izvor koji Auditor proverava. Ovo nije finansijski savet.</p>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = new Intl.NumberFormat('sr-RS', { maximumFractionDigits: 3 });
+const rsd = new Intl.NumberFormat('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n) => (n === null || n === undefined ? '–' : num.format(n));
+const time = (iso) => new Date(iso).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const localDate = (iso) => (iso ? iso.split('-').reverse().join('.') + '.' : '–');
+
+function toast(text, bad) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.className = 'toast' + (bad ? ' bad' : '');
+  t.style.display = 'block';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.display = 'none'), 6000);
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options && { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(options) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+const post = (path, body = {}) => api(path, body);
+
+/** Source references in a text become links that show the source line. */
+function linkRefs(text) {
+  return esc(text).replace(/([\w./-]+\.(?:pdf|csv)):(\d+)/g, (m) => `<a class="ref" data-ref="${m}">${m}</a>`);
+}
+
+// ------------------------------------------------------------ tabs
+const loaders = {};
+document.querySelectorAll('nav button').forEach((b) =>
+  b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x === b));
+    document.querySelectorAll('main > section').forEach((s) => s.classList.toggle('hidden', s.id !== 'tab-' + b.dataset.tab));
+    loaders[b.dataset.tab]?.();
+  }),
+);
+
+// ------------------------------------------------------------ jobs
+let summary = {};
+async function refreshSummary() {
+  summary = await api('/api/summary');
+  if (!$('#asOf').value) $('#asOf').value = summary.defaultDate;
+  const running = summary.running;
+  $('#jobState').innerHTML = running ? `<span class="chip wait">radi: ${esc(running.label)}</span>` : summary.network ? '<span class="chip ok">Mozaik Network: uključen</span>' : '<span class="chip plain">Network: isključen</span>';
+  document.querySelectorAll('#runFlow, [data-agent], #readAll, .run-btn').forEach((b) => (b.disabled = Boolean(running)));
+  const by = (status) => summary.findings.filter((f) => f.status === status).reduce((s, f) => s + f.n, 0);
+  $('#stats').innerHTML = [
+    ['Nalaza čeka Auditora', by('CEKA')],
+    ['Potvrđeno', by('POTVRDJEN')],
+    ['Odbijeno', by('ODBIJEN')],
+    ['Nepotvrđene otpremnice', summary.unconfirmedDeliveryNotes.length],
+  ].map(([label, n]) => `<div class="stat"><span class="small muted">${label}</span><b>${n}</b></div>`).join('');
+}
+
+async function startJob(path, body) {
+  try {
+    const job = await post(path, body);
+    toast('Pokrenuto: ' + job.label);
+    refreshSummary();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+$('#runFlow').onclick = () => startJob('/api/flow', { asOf: $('#asOf').value });
+document.querySelectorAll('[data-agent]').forEach((b) => (b.onclick = () => startJob('/api/agents/' + b.dataset.agent, { asOf: $('#asOf').value })));
+
+// ------------------------------------------------------------ timeline
+const events = [];
+let cutoff = 0;
+let selectedLoop = null;
+const source = new EventSource('/api/events');
+source.onmessage = (m) => {
+  const e = JSON.parse(m.data);
+  events.push(e);
+  scheduleTimeline();
+  if (e.type === 'note' && e.agent === 'Aplikacija') {
+    refreshSummary();
+    if (/završeno|greška/.test(e.detail)) {
+      toast(e.detail, /greška/.test(e.detail));
+      loaders[document.querySelector('nav button.active').dataset.tab]?.();
+    }
+  }
+};
+let pending = false;
+function scheduleTimeline() {
+  if (pending) return;
+  pending = true;
+  requestAnimationFrame(() => {
+    pending = false;
+    renderTimeline();
+  });
+}
+setInterval(() => summary.running && renderTimeline(), 1000);
+$('#clearTimeline').onclick = () => {
+  cutoff = events.length ? events[events.length - 1].seq : 0;
+  selectedLoop = null;
+  renderTimeline();
+};
+
+function lanesOf(list) {
+  const lanes = new Map();
+  for (const e of list) {
+    if (!['loop.started', 'tool.started', 'tool.completed', 'loop.answered'].includes(e.type)) continue;
+    let lane = lanes.get(e.loopId);
+    if (!lane) {
+      lane = { loopId: e.loopId, agent: e.agent, start: e.at, end: null, status: 'running', tools: [], task: '' };
+      lanes.set(e.loopId, lane);
+    }
+    if (e.type === 'loop.started') { lane.start = e.at; lane.task = e.task; }
+    if (e.type === 'tool.started') lane.tools.push(e.at);
+    if (e.type === 'loop.answered') { lane.end = e.at; lane.status = 'done'; lane.answer = e.detail; }
+  }
+  return [...lanes.values()];
+}
+
+function renderTimeline() {
+  const list = events.filter((e) => e.seq > cutoff);
+  const lanes = lanesOf(list);
+  const failed = list.some((e) => e.type === 'loop.failed');
+  if (lanes.length === 0) {
+    $('#lanes').innerHTML = '<div class="empty" style="grid-column:1/3">Još nema loop-ova. Pokreni ceo tok ili pročitaj dokumente.</div>';
+  } else {
+    const now = Date.now();
+    const t0 = Math.min(...lanes.map((l) => Date.parse(l.start)));
+    const t1 = Math.max(...lanes.map((l) => (l.end ? Date.parse(l.end) : now)), t0 + 1000);
+    const span = t1 - t0;
+    const pct = (t) => ((Date.parse(t) - t0) / span) * 100;
+    $('#lanes').innerHTML =
+      lanes.map((l) => {
+        const end = l.end ? Date.parse(l.end) : now;
+        const left = pct(l.start);
+        const width = Math.max(0.4, ((end - Date.parse(l.start)) / span) * 100);
+        const secs = ((end - Date.parse(l.start)) / 1000).toFixed(1);
+        const status = l.status === 'done' ? '' : failed ? ' failed' : ' running';
+        const ticks = l.tools.map((t) => `<span class="tick" style="left:${((Date.parse(t) - Date.parse(l.start)) / Math.max(1, end - Date.parse(l.start))) * 100}%"></span>`).join('');
+        return `<div class="lane-label" data-loop="${esc(l.loopId)}"><b>${esc(l.agent)}</b><br><span class="mono">loop ${esc(l.loopId.slice(0, 8))}</span> <span class="small muted">· ${time(l.start)} · ${secs}s · ${l.tools.length} tool</span></div>
+          <div class="track" data-loop="${esc(l.loopId)}"><div class="bar${status}" style="left:${left}%;width:${width}%">${ticks}${l.status === 'done' ? '' : 'radi…'}</div></div>`;
+      }).join('') +
+      `<div class="axis"><span>${time(new Date(t0).toISOString())}</span><span>${((t1 - t0) / 1000).toFixed(0)} s</span><span>${time(new Date(t1).toISOString())}</span></div>`;
+    document.querySelectorAll('[data-loop]').forEach((el) => (el.onclick = () => { selectedLoop = el.dataset.loop; renderTimeline(); }));
+  }
+
+  const shown = selectedLoop ? list.filter((e) => e.loopId === selectedLoop) : list;
+  const lane = lanes.find((l) => l.loopId === selectedLoop);
+  $('#loopTitle').innerHTML = lane
+    ? `${esc(lane.agent)} <span class="mono muted">loop ${esc(lane.loopId)}</span> <a class="ref small" id="allLoops">prikaži sve</a><div class="small muted" style="font-weight:400;margin-top:4px">Zadatak: ${esc(lane.task)}</div>`
+    : 'Dnevnik <span class="muted small">(klikni traku da vidiš samo taj loop)</span>';
+  const all = $('#allLoops');
+  if (all) all.onclick = () => { selectedLoop = null; renderTimeline(); };
+  const label = { 'loop.started': 'start', 'tool.started': '→', 'tool.completed': '←', 'loop.answered': 'odgovor', 'loop.failed': 'GREŠKA', note: '•' };
+  $('#log').innerHTML = shown.slice(-300).reverse().map((e) =>
+    `<div><span class="t">${time(e.at)}</span><b>${esc(e.agent)}</b> ${esc(label[e.type] ?? e.type)} ${e.tool ? `<span class="mono">${esc(e.tool)}</span> ` : ''}<span class="${e.type === 'loop.failed' ? '' : 'muted'}">${esc(e.type === 'loop.started' ? e.task : e.detail ?? '')}</span></div>`,
+  ).join('') || '<div class="empty">Prazno.</div>';
+}
+
+// ------------------------------------------------------------ documents
+loaders.docs = async () => {
+  const docs = await api('/api/documents');
+  const kindName = { invoice: 'faktura', delivery_note: 'otpremnica' };
+  $('#docRows').innerHTML = docs.map((d) => {
+    const status = d.status === 'NIJE_PROCITAN' ? '<span class="chip plain">nije pročitan</span>'
+      : d.kind === 'delivery_note' && !d.receipt ? '<span class="chip warn">čeka potvrdu</span>'
+      : `<span class="chip ok">${esc(d.status)}</span>`;
+    const action = d.kind === 'delivery_note' && d.id && !d.receipt ? `<button class="run-btn" data-confirm="${d.id}">Potvrdi prijem</button>`
+      : d.kind === 'invoice' && d.receipt ? `<button class="run-btn" data-proc="${esc(d.number)}">Nabavka</button>`
+      : d.kind === 'invoice' && d.id ? '<span class="small muted">otpremnica nije potvrđena</span>' : '';
+    return `<tr><td class="mono">${linkRefs(d.file)}</td><td>${kindName[d.kind]}</td><td>${esc(d.number ?? '–')}</td><td>${esc(d.supplier ?? '')}</td><td>${status}</td>
+      <td>${d.receipt ? `${esc(d.receipt.number)}<div class="small muted">${esc(d.receipt.confirmedBy ?? '')}</div>` : '–'}</td><td>${action}</td></tr>`;
+  }).join('');
+  document.querySelectorAll('[data-confirm]').forEach((b) => (b.onclick = () => showConfirm(b.dataset.confirm)));
+  document.querySelectorAll('[data-proc]').forEach((b) => (b.onclick = () => startJob('/api/agents/procurement', { invoice: b.dataset.proc })));
+  refreshSummary();
+};
+$('#readAll').onclick = () => startJob('/api/documents/read', {});
+
+async function showConfirm(id) {
+  const d = await api('/api/documents/' + id);
+  const panel = $('#confirmPanel');
+  panel.classList.remove('hidden');
+  panel.innerHTML = `<h2>Potvrda prijema: otpremnica ${esc(d.broj)} <span class="muted small">${esc(d.dobavljac ?? '')}, ${localDate(d.datum_dokumenta)}</span></h2>
+    <p class="small muted">Document agent je pročitao stavke. Upiši količinu koja je stvarno primljena tamo gde se razlikuje, pa potvrdi. Nastaje PRIJEMNICA.</p>
+    <table><thead><tr><th>#</th><th>Šifra</th><th>Naziv</th><th class="num">Na otpremnici</th><th class="num">Primljeno</th><th>JM</th><th>Rok</th><th>Izvor</th></tr></thead><tbody>
+    ${d.items.map((i) => `<tr><td>${i.redni_broj}</td><td class="mono">${esc(i.sifra_dobavljaca ?? '')}</td><td>${esc(i.naziv)}</td><td class="num">${fmt(i.kolicina)}</td>
+      <td class="num">${i.sifra_dobavljaca ? `<input type="number" step="any" min="0" data-code="${esc(i.sifra_dobavljaca)}" data-orig="${i.kolicina}" value="${i.kolicina}">` : fmt(i.kolicina)}</td>
+      <td>${esc(i.jm ?? '')}</td><td>${localDate(i.rok_trajanja)}</td><td class="mono small">${linkRefs(i.izvor)}</td></tr>`).join('')}
+    </tbody></table>
+    <div style="margin-top:12px;display:flex;gap:8px"><button class="primary" id="doConfirm">Potvrdi prijem</button><button id="cancelConfirm">Otkaži</button></div>
+    <div id="confirmSource"></div>`;
+  $('#cancelConfirm').onclick = () => panel.classList.add('hidden');
+  $('#doConfirm').onclick = async () => {
+    const corrections = {};
+    panel.querySelectorAll('input[data-code]').forEach((input) => {
+      if (Number(input.value) !== Number(input.dataset.orig)) corrections[input.dataset.code] = Number(input.value);
+    });
+    try {
+      const result = await post('/api/delivery-notes/confirm', { number: d.broj, corrections });
+      toast(`Upisana ${result.receiptNumber}` + (result.deviations.length ? `, odstupanja: ${result.deviations.length}` : ''));
+      panel.classList.add('hidden');
+      loaders.docs();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+}
+
+// ------------------------------------------------------------ findings
+let selectedFinding = null;
+loaders.findings = async () => {
+  const q = new URLSearchParams();
+  if ($('#fStatus').value) q.set('status', $('#fStatus').value);
+  if ($('#fAgent').value) q.set('agent', $('#fAgent').value);
+  const rows = await api('/api/findings?' + q);
+  const chip = (s) => `<span class="chip ${s === 'POTVRDJEN' ? 'ok' : s === 'ODBIJEN' ? 'bad' : 'wait'}">${s}</span>`;
+  const value = (f, n) => (n === null ? '–' : f.tip === 'PAD_MARZE' ? fmt(n) + '%' : fmt(n));
+  $('#findingRows').innerHTML = rows.map((f) =>
+    `<tr class="click${f.id === selectedFinding ? ' selected' : ''}" data-id="${f.id}"><td>${f.id}</td><td>${esc(f.agent)}</td><td>${esc(f.tip)}</td><td>${chip(f.audit_status)}</td>
+      <td class="num">${value(f, f.ocekivano)}</td><td class="num">${value(f, f.stvarno)}</td><td class="num">${f.iznos_bez_pdv === null ? '–' : rsd.format(f.iznos_bez_pdv)}</td>
+      <td>${esc(f.opis)}</td></tr>`,
+  ).join('') || '<tr><td colspan="8" class="empty">Nema nalaza. Pokreni ceo tok.</td></tr>';
+  document.querySelectorAll('#findingRows tr[data-id]').forEach((tr) => (tr.onclick = () => showFinding(Number(tr.dataset.id))));
+  refreshSummary();
+};
+$('#fStatus').onchange = loaders.findings;
+$('#fAgent').onchange = loaders.findings;
+
+async function showFinding(id) {
+  selectedFinding = id;
+  document.querySelectorAll('#findingRows tr').forEach((tr) => tr.classList.toggle('selected', Number(tr.dataset.id) === id));
+  const f = await api('/api/findings/' + id);
+  const status = f.audit_status === 'POTVRDJEN' ? 'ok' : f.audit_status === 'ODBIJEN' ? 'bad' : 'wait';
+  $('#findingDetail').innerHTML = `<h3>#${f.id} ${esc(f.agent)} · ${esc(f.tip)}</h3>
+    <p>${esc(f.opis)}</p>
+    ${f.predlog ? `<p><b>Predlog:</b> ${esc(f.predlog)}</p>` : ''}
+    <p><span class="chip ${status}">${f.audit_status}</span> ${f.audit_napomena ? `<span class="small">${esc(f.audit_napomena)}</span>` : '<span class="small muted">Auditor još nije proverio.</span>'}</p>
+    <h2 style="margin-top:14px">Provere (kod, sada)</h2>
+    <div class="checks">${f.checks.map((c) => `<div><span class="mark ${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✗'}</span><b>${esc(c.check)}</b> <span class="small">${linkRefs(c.detail)}</span></div>`).join('')}</div>
+    <h2 style="margin-top:14px">Izvori</h2>
+    <div class="small">${f.izvor.split('; ').map((s) => `<div style="padding:3px 0">${linkRefs(s)}</div>`).join('')}</div>
+    <div id="findingSource"></div>
+    <p class="small muted" style="margin-top:12px">Kreirano ${esc(f.kreirano)} · ključ <span class="mono">${esc(f.kljuc ?? '–')}</span></p>`;
+}
+
+// Clicking any source reference shows the line itself.
+document.addEventListener('click', async (event) => {
+  const a = event.target.closest('a.ref[data-ref]');
+  if (!a) return;
+  const box = a.closest('#findingDetail') ? $('#findingSource') : a.closest('#confirmPanel') ? $('#confirmSource') : null;
+  try {
+    const s = await api('/api/sources?ref=' + encodeURIComponent(a.dataset.ref));
+    const html = `<div class="source"><div class="muted" style="margin-bottom:4px">${esc(s.file)}</div>${s.lines.map((l) => `<div class="${l.n === s.line ? 'hl' : ''}"><span class="n">${l.n}</span>${esc(l.text)}</div>`).join('')}</div>`;
+    if (box) box.innerHTML = html;
+    else toast(s.lines.find((l) => l.n === s.line)?.text ?? '');
+  } catch (e) {
+    toast(e.message, true);
+  }
+});
+
+// ------------------------------------------------------------ stock
+loaders.stock = async () => {
+  const s = await api('/api/stock/overview?asOf=' + ($('#asOf').value || ''));
+  $('#stockTitle').textContent = `Pregled zaliha na dan ${localDate(s.asOf)} (alarm ${s.alarmDays} dana pre isteka)`;
+  const notes = [];
+  if (s.unconfirmedDeliveryNotes.length) notes.push(`Nepotvrđene otpremnice (njihova roba nije u stanju): ${s.unconfirmedDeliveryNotes.map((n) => n.number).join(', ')}.`);
+  if (s.soldWithoutReceipt.length) notes.push(`Prodato bez potvrđene prijemnice: ${s.soldWithoutReceipt.map((n) => n.name).join(', ')}.`);
+  $('#stockNotes').textContent = notes.join(' ');
+  const chip = { OK: 'ok', ISTICE_USKORO: 'warn', ISTEKLO: 'bad', ISTEKLO_PRI_PRIJEMU: 'bad', BEZ_ROKA: 'plain' };
+  const name = { OK: 'u roku', ISTICE_USKORO: 'ističe uskoro', ISTEKLO: 'isteklo', ISTEKLO_PRI_PRIJEMU: 'isteklo pri prijemu', BEZ_ROKA: 'bez roka' };
+  $('#stockRows').innerHTML = s.lots.map((l) =>
+    `<tr><td>${localDate(l.expiry)}</td><td class="num">${l.daysLeft ?? '–'}</td><td><span class="chip ${chip[l.status]}">${name[l.status]}</span></td>
+      <td class="num">${fmt(l.received)}</td><td class="num"><b>${fmt(l.remaining)}</b></td><td>${esc(l.unit ?? '')}</td>
+      <td>${esc(l.name)}${l.usedBySales ? '' : ' <span class="small muted" title="Nijedan prodati artikal ne koristi ovu robu">*</span>'}</td>
+      <td class="small">${esc(l.receipt)}</td><td class="mono small">${linkRefs(l.source)}</td></tr>`,
+  ).join('') || '<tr><td colspan="9" class="empty">Nema potvrđenih prijemnica.</td></tr>';
+};
+$('#asOf').onchange = () => document.querySelector('nav button.active').dataset.tab === 'stock' && loaders.stock();
+
+refreshSummary().then(renderTimeline);
+</script>
+</body>
+</html>

@@ -14,10 +14,13 @@ import {
   textCheck,
   type AuditCheck,
 } from '../../domain/audit.js';
-import { toLocalDate } from '../../domain/document-draft.js';
+import { parseLocalNumber, toLocalDate } from '../../domain/document-draft.js';
 import { extractPdfLines } from '../../domain/pdf.js';
-import { itemKey } from '../../domain/procurement.js';
+import { itemKey, PRICE_FILE_NAME } from '../../domain/procurement.js';
+import type { Article } from '../../domain/profit.js';
+import type { AgreedPrice } from '../../domain/purchase-prices.js';
 import type { Recipes } from '../../domain/recipes.js';
+import { salesFindingValues, salesIssueKey, salesIssues } from '../sales/tools.js';
 import { SALES_FILE_NAME, type SaleRow } from '../../domain/sales.js';
 import { checkStock, stockDateOfKey, stockFindingValues } from '../../domain/stock.js';
 
@@ -25,8 +28,18 @@ export interface AuditContext {
   db: DatabaseSync;
   recipes: Recipes;
   sales: readonly SaleRow[];
+  prices: readonly AgreedPrice[];
+  articles: readonly Article[];
   /** Where the PDFs a finding's izvor names live ("fakture/...", "otpremnice/..."). */
   dataDir: string;
+}
+
+/** Every number in a value, however deep: what the agent was shown, so its text may use it. */
+function numbersIn(value: unknown): number[] {
+  if (typeof value === 'number') return [value];
+  if (Array.isArray(value)) return value.flatMap(numbersIn);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(numbersIn);
+  return [];
 }
 
 /** A finding as the Auditor checked it: its numbers, its text and every check with its result. */
@@ -74,6 +87,22 @@ export function createFindingAuditor(ctx: AuditContext) {
     return lines[Number(ref.slice(at + 1)) - 1];
   }
 
+  const csvFiles = new Map<string, string[]>();
+  /** Row N of a CSV named from the project root ("data/nabavne_cene.csv"); the header is row 1. */
+  function csvRow(file: string, row: number): string | undefined {
+    let lines = csvFiles.get(file);
+    if (!lines) {
+      try {
+        lines = readFileSync(path.resolve(ctx.dataDir, '..', file), 'utf8').replace(/^﻿/, '').split(/\r?\n/);
+      } catch {
+        lines = [];
+      }
+      csvFiles.set(file, lines);
+    }
+    const text = lines[row - 1];
+    return text === undefined || text.trim() === '' ? undefined : text;
+  }
+
   /** Every source reference must exist. Returns the check and the quoted source text. */
   async function sourcesExist(izvor: string): Promise<{ check: AuditCheck; quoted: string }> {
     const refs = sourceRefs(izvor);
@@ -85,9 +114,15 @@ export function createFindingAuditor(ctx: AuditContext) {
       else quoted.push(`${file}:${line} "${text}"`);
     }
     for (const { file, row } of refs.csv) {
-      const sale = file === SALES_FILE_NAME ? salesByRow.get(row) : undefined;
-      if (!sale) missing.push(`${file}:${row}`);
-      else quoted.push(`${file}:${row} ${sale.date} ${sale.time} ${sale.name} ${formatNumber(sale.quantity)}`);
+      if (file === SALES_FILE_NAME) {
+        const sale = salesByRow.get(row);
+        if (!sale) missing.push(`${file}:${row}`);
+        else quoted.push(`${file}:${row} ${sale.date} ${sale.time} ${sale.name} ${formatNumber(sale.quantity)}`);
+      } else {
+        const text = csvRow(file, row);
+        if (text === undefined) missing.push(`${file}:${row}`);
+        else quoted.push(`${file}:${row} ${text}`);
+      }
     }
     const count = refs.pdf.length + refs.csv.length;
     return {
@@ -228,10 +263,70 @@ export function createFindingAuditor(ctx: AuditContext) {
       });
     }
 
-    const values = [issue.received, issue.sold, issue.over, issue.remaining, issue.daysLeft, issue.dailyUse, issue.projectedLeftover].filter(
-      (n): n is number => typeof n === 'number',
-    );
-    return { checks, sources: `${lines.join(' ')} ${JSON.stringify(issue)}`, values };
+    return { checks, sources: `${lines.join(' ')} ${JSON.stringify(issue)}`, values: numbersIn(issue) };
+  }
+
+  /** Prodaja: prices, margins and sales are computed again for the finding's date and must give the same numbers. */
+  async function salesChecks(f: FindingRow): Promise<{ checks: AuditCheck[]; sources: string; values: number[] }> {
+    if (!f.kljuc) {
+      return { checks: [{ check: 'ponovni obračun', ok: false, detail: 'nalaz nema ključ, pa ne može da se ponovo izračuna' }], sources: '', values: [] };
+    }
+    const asOf = stockDateOfKey(f.kljuc) ?? latestSaleDate;
+    const issue = salesIssues(ctx, asOf).find((i) => salesIssueKey(i) === f.kljuc);
+    if (!issue) {
+      return {
+        checks: [{ check: 'ponovni obračun', ok: false, detail: `podaci na dan ${asOf} više ne daju ovaj nalaz (${f.kljuc})` }],
+        sources: '',
+        values: [],
+      };
+    }
+    const v = salesFindingValues(issue);
+    const same = v.type === f.tip && sameNumber(v.expected, f.ocekivano) && sameNumber(v.actual, f.stvarno) && sameNumber(v.amountWithoutVat, f.iznos_bez_pdv);
+    const recomputed =
+      issue.kind === 'price'
+        ? `ugovoreno ${formatNumber(issue.difference.agreedPrice)}, fakturisano ${formatNumber(issue.difference.invoicedPrice)}, ` +
+          `x ${formatNumber(issue.difference.quantity)} = ${formatNumber(issue.difference.amountWithoutVat)}`
+        : issue.kind === 'margin'
+          ? `nabavna ${formatNumber(issue.drop.before.cost)} -> ${formatNumber(issue.drop.after.cost)}, marža ` +
+            `${formatNumber(issue.drop.before.marginPercent)}% -> ${formatNumber(issue.drop.after.marginPercent)}%, ` +
+            `prodato ${formatNumber(issue.drop.soldSince)}, izgubljeno ${formatNumber(issue.drop.lostMargin)}`
+          : `nedeljno ${issue.drop.weeks.map((w) => formatNumber(w.quantity)).join(' / ')} (${formatNumber(issue.drop.percent)}%)`;
+    const checks: AuditCheck[] = [
+      {
+        check: 'ponovni obračun',
+        ok: same,
+        detail: `na dan ${asOf}: ${recomputed}; nalaz: ${formatNumber(f.ocekivano)} / ${formatNumber(f.stvarno)} / ${formatNumber(f.iznos_bez_pdv)}`,
+      },
+    ];
+
+    let sources = JSON.stringify(issue);
+    if (issue.kind === 'price') {
+      const d = issue.difference;
+      const invoiceLine = await pdfLine(d.invoiceSource);
+      checks.push({
+        check: 'cena na fakturi',
+        ok: invoiceLine !== undefined && lineHasNumber(invoiceLine, d.invoicedPrice) && lineHasNumber(invoiceLine, d.quantity),
+        detail: `${d.invoiceSource}: "${invoiceLine ?? 'linija ne postoji'}"`,
+      });
+      const priceRef = /:(\d+)/.exec(d.priceSource);
+      const priceRow = priceRef ? csvRow(PRICE_FILE_NAME, Number(priceRef[1])) : undefined;
+      checks.push({
+        check: 'ugovorena cena',
+        ok: priceRow !== undefined && priceRow.split(';').some((cell) => sameNumber(parseLocalNumber(cell), d.agreedPrice)),
+        detail: `${d.priceSource}: "${priceRow ?? 'red ne postoji'}"`,
+      });
+      sources += ` ${invoiceLine ?? ''} ${priceRow ?? ''}`;
+    } else if (issue.kind === 'margin') {
+      const article = ctx.articles.find((a) => a.code === issue.drop.articleCode);
+      checks.push({
+        check: 'prodajna cena',
+        ok: article !== undefined && sameNumber(Math.round((article.price / (1 + article.vatRate / 100)) * 100) / 100, issue.drop.netPrice),
+        detail: article
+          ? `data/artikli.json artikal ${article.code}: ${formatNumber(article.price)} sa PDV ${article.vatRate}%, bez PDV ${formatNumber(issue.drop.netPrice)}`
+          : `artikla ${issue.drop.articleCode} nema u data/artikli.json`,
+      });
+    }
+    return { checks, sources, values: numbersIn(issue) };
   }
 
   async function audit(f: FindingRow): Promise<FindingAudit> {
@@ -241,7 +336,7 @@ export function createFindingAuditor(ctx: AuditContext) {
         ? await quantityChecks(f)
         : f.tip === 'ROK' || f.tip === 'MANJAK'
           ? await stockChecks(f)
-          : { checks: [{ check: 'vrsta nalaza', ok: false, detail: `Auditor još ne ume da proveri nalaz vrste ${f.tip}` }], sources: '', values: [] };
+          : await salesChecks(f);
     const text = textCheck(
       `${f.opis} ${f.predlog ?? ''}`,
       `${f.izvor} ${exist.quoted} ${specific.sources}`,
