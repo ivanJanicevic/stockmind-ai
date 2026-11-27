@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import {
@@ -114,6 +114,8 @@ const corrections = (() => {
   }
 })();
 const UPLOADS_DIR = `${OUT_DIR}/uploads`;
+// Corrected invoices belong to the run they were uploaded in; a new run starts without them.
+rmSync(UPLOADS_DIR, { recursive: true, force: true });
 // A document path as served under /doc/ (dashboard) and docs/demo/doc/ (replay).
 const docPath = (file: string) => file.replace(/^(data|out)\//, '');
 // Where to read it: data/ is next to the code, out/ is in the working directory.
@@ -738,6 +740,7 @@ const articles = (() => {
 function snapshot(): unknown {
   const p = state.planning;
   const s = {
+    runId: startedAt, // a dashboard tab reloads when it sees a new run
     finished,
     elapsedMs: elapsed(),
     model: currentModel(),

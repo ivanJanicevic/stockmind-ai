@@ -114,6 +114,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 .chips.sm{margin:0}.chips.sm .chip{padding:5px 12px;font-size:12px}
 .linkbtn{background:none;border:0;color:var(--muted);font-size:12px;padding:0;text-decoration:underline dotted}
 @media(max-width:1100px){.kpis{grid-template-columns:1fr 1fr}}
+.cn{cursor:pointer;border-bottom:1px dashed rgba(255,255,255,.28)}.cn:hover{border-bottom-color:var(--mint)}.cc{font:11px ui-monospace,Menlo,monospace;color:var(--muted);background:var(--panel2);border:1px solid var(--line2);border-radius:6px;padding:1px 6px;margin-right:6px}
 footer{color:var(--dim);font-size:12px;margin-top:26px}
 @media(max-width:1100px){.flow{grid-template-columns:repeat(3,minmax(0,1fr))}.flow .st::after{display:none}.grid,.row2,.two,.mini{grid-template-columns:1fr}.meta{grid-template-columns:1fr 1fr}.app{grid-template-columns:70px 1fr}}
 </style></head>
@@ -200,6 +201,16 @@ const TL=()=>S.timeline.filter(t=>t.status!=='idle');
 // Role totals: every registered agent, except claims writers, which only count when an invoice is held.
 const roleAgents=(keys)=>S.timeline.filter(t=>keys.includes(roleOf(t))&&!(roleOf(t)==='claims'&&t.status==='idle'));
 const working=()=>{const n=S.timeline.filter(isActive).length;return n+' agent'+(n===1?'':'s')+' working';};
+// Check details start with "CODE Name: …". Show the item name; a click shows
+// (or hides) the supplier's code. Kept across refreshes.
+const shownCodes=new Set();
+function togCode(k){shownCodes.has(k)?shownCodes.delete(k):shownCodes.add(k);render();}
+function itemText(c,text){
+  const l=c.lines.find(l=>text.startsWith(l.code+' '+l.name));if(!l)return esc(text);
+  return '<span class="cn" title="Click to show the supplier code" data-k="'+esc(l.code)+'" onclick="event.stopPropagation();togCode(this.dataset.k)">'+(shownCodes.has(l.code)?'<span class="cc">'+esc(l.code)+'</span>':'')+esc(l.name)+'</span>'+esc(text.slice(l.code.length+1+l.name.length));
+}
+// "quantity OPT-SP-025" → "quantity": the item is named in the detail.
+const checkName=(c,x)=>{const l=c.lines.find(l=>x.name.endsWith(' '+l.code));return esc(l?x.name.slice(0,-l.code.length-1):x.name);};
 let tipT=0;
 function showTip(el){const c=CIT[+el.dataset.ci];if(!c)return;const t=$('tip');clearTimeout(tipT);t.innerHTML=tipHtml(c);t.style.display='block';
   const r=el.getBoundingClientRect(),w=t.offsetWidth,hh=t.offsetHeight;let x=Math.min(Math.max(12,r.left),innerWidth-w-12),y=r.bottom+8;if(y+hh>innerHeight-12)y=Math.max(12,r.top-hh-8);t.style.left=x+'px';t.style.top=y+'px';}
@@ -207,9 +218,16 @@ const hideTip=()=>{tipT=setTimeout(()=>{$('tip').style.display='none';},180);};
 document.addEventListener('mouseover',(e)=>{const el=e.target.closest&&e.target.closest('[data-ci]');if(el)showTip(el);else if(!e.target.closest||!e.target.closest('#tip'))hideTip();});
 $('tip').addEventListener('mouseenter',()=>clearTimeout(tipT));$('tip').addEventListener('mouseleave',hideTip);
 async function tick(){
-  try{S=MODE==='live'?await (await fetch('/state',{cache:'no-store'})).json():applySim(await replayFrame());}
-  catch{ if(MODE==='replay'){$('view').innerHTML='<div class="card"><div class="empty">No recording yet: run <code>npm run record</code> to create docs/demo/replay.json from a real run.</div></div>';$('st').innerHTML='<span class="dot"></span>no recording';}else{$('st').innerHTML='<span class="dot"></span>run ended — page is static';} return; }
-  render(); setTimeout(tick,MODE==='replay'?250:S.finished?2500:500);
+  let next;
+  try{next=MODE==='live'?await (await fetch('/state',{cache:'no-store'})).json():applySim(await replayFrame());}
+  catch{
+    // Live: the run was stopped. Keep the last state visible, say so, and keep
+    // polling: a new run is picked up below.
+    if(MODE==='live'&&S){$('st').innerHTML='<span class="dot"></span>dashboard stopped — showing the last run · waiting for a new run…';setTimeout(tick,2000);return;}
+    if(MODE==='replay'){$('view').innerHTML='<div class="card"><div class="empty">No recording yet: run <code>npm run record</code> to create docs/demo/replay.json from a real run.</div></div>';$('st').innerHTML='<span class="dot"></span>no recording';}else{$('st').innerHTML='<span class="dot"></span>no run — start npm run demo';setTimeout(tick,2000);} return; }
+  // A new run (npm run demo again on the same port): reload for its state, token and a clean page.
+  if(MODE==='live'&&S&&next.runId!==S.runId){location.reload();return;}
+  S=next;render(); setTimeout(tick,MODE==='replay'?250:S.finished?2500:500);
 }
 function go(v){view=v;render();}
 function render(){
@@ -279,7 +297,7 @@ function overview(){
 function payments(){
   return '<div class="head"><div><h1>Payment run</h1><div class="sub">Each invoice is read by an invoice clerk and its delivery note by a receiving clerk; code matches both against the agreed prices.</div></div></div>'+chipsRow()+
   '<div class="cards">'+filtered().map(c=>{const f=c.checks.filter(x=>!x.ok&&x.blocking),w=c.checks.filter(x=>!x.ok&&!x.blocking);
-    const r=[...c.errors.map(e=>'<li class="bad">'+esc(e)+'</li>'),...f.map(x=>'<li>'+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+(x.sources&&x.sources.length?checkCite(c,x):'')+'</li>'),...w.map(x=>'<li class="warn">⚠ '+esc(x.detail)+'</li>')];
+    const r=[...c.errors.map(e=>'<li class="bad">'+esc(e)+'</li>'),...f.map(x=>'<li>'+itemText(c,x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+(x.sources&&x.sources.length?checkCite(c,x):'')+'</li>'),...w.map(x=>'<li class="warn">⚠ '+itemText(c,x.detail)+'</li>')];
     if(c.status==='needs_approval')r.push('<li>All '+c.checks.length+' checks passed · above the agent limit</li>');if(c.status==='ready')r.push('<li class="ok">All '+c.checks.length+' checks passed</li>');if(c.approvedBy)r.push('<li class="ok">Approved — '+esc(c.approvedBy)+'</li>');if(c.claim)r.push('<li>✉ Claim drafted to '+esc(c.claim.to)+'</li>');
     const h=hue(c.supplier);
     return '<div class="card inv" onclick="openReview(\''+esc(c.id)+'\')"><div class="item" style="padding:0;cursor:inherit"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.invoiceNo)+'</b><span>'+esc(c.supplier||'Reading…')+'</span></div><div class="a">'+rsd(c.amount)+'</div></div><div style="margin-top:12px"><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span>'+(c.version>1?' <span class="badge b-reading">v'+c.version+' · corrected</span>':'')+'</div><ul class="reasons">'+r.join('')+'</ul></div>';}).join('')+'</div>';
@@ -400,7 +418,7 @@ function renderReview(){
   const qn=(l)=>({t:'Delivery note line '+l.code+' as the receiving clerk read it',q:l.noteQuote,qf:'the delivery note',href:npdf,n:'Read by a different agent from a different document; code compares the two.'});
   const lines=c.lines.map(l=>{const bad=l.delivered!=null&&l.delivered!==l.quantity,I=(x)=>l.quote?cite(x,qi(l)):x,N=(x)=>l.noteQuote?cite(x,qn(l)):x;return '<tr class="'+(bad?'mismatch':'')+'"><td class="dim">'+esc(l.code)+'</td><td>'+esc(l.name)+'</td><td class="n">'+I(fmtq(l.quantity)+' '+esc(l.unit))+'</td><td class="n '+(bad?'bad':'')+'">'+(l.delivered==null?'<span class="bad">not delivered</span>':N(fmtq(l.delivered)))+'</td><td class="n">'+I(fmt(l.unitPrice))+'</td><td class="n">'+I(l.vatRate+' %')+'</td><td class="n">'+I(fmt(l.lineTotal))+'</td><td>'+(l.expiry?N(esc(l.expiry)):'<span class="dim">–</span>')+'</td></tr>';}).join('');
   const chk=(x)=>x.sources&&x.sources.length?checkCite(c,x):'';
-  const checks=[...c.errors.map(e=>'<div class="check"><span class="ic bad">✗</span><span>'+esc(e)+'</span></div>'),...c.checks.map(x=>'<div class="check"><span class="ic '+(x.ok?'ok':x.blocking?'bad':'warn')+'">'+(x.ok?'✓':x.blocking?'✗':'⚠')+'</span><span><b>'+esc(x.name)+'</b> — '+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+chk(x)+'</span></div>')].join('');
+  const checks=[...c.errors.map(e=>'<div class="check"><span class="ic bad">✗</span><span>'+esc(e)+'</span></div>'),...c.checks.map(x=>'<div class="check"><span class="ic '+(x.ok?'ok':x.blocking?'bad':'warn')+'">'+(x.ok?'✓':x.blocking?'✗':'⚠')+'</span><span><b>'+checkName(c,x)+'</b> — '+itemText(c,x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+chk(x)+'</span></div>')].join('');
   const policy=can?'<div class="policy"><b class="warn">Why it waits for you</b><div class="muted">Every check passed, but '+rsd(c.amount)+' is above the agent limit of '+rsd(S.limitRsd)+'. Approving adds it to the payment draft — a file; nothing is paid or sent.</div></div>'
     :c.status==='held'?'<div class="policy"><b class="bad">Held — can\'t be approved</b><div class="muted">Resolve the problems above with the supplier first (a claim is drafted below when the documents show a discrepancy). Approval never overrides a failed check.</div></div>'
     :c.status==='approved'?'<div class="policy"><b class="ok">Approved</b><div class="muted">'+esc(c.approvedBy)+' · it is in the payment draft.</div></div>':c.status==='ready'?'<div class="policy"><b class="ok">Ready</b><div class="muted">Within the agent limit — no approval needed. It is in the payment draft.</div></div>':'<div class="policy muted">The clerks are still reading this invoice and its delivery note…</div>';
