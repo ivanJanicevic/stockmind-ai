@@ -1,7 +1,7 @@
 {
   "name": "stockmind-ai",
   "version": "1.0.0",
-  "description": "Multi-agent accounts payable: invoices to a validated SEPA payment draft, built on Mozaik",
+  "description": "Mozaik multi-agent café finance desk: three-way invoice match, payment draft, stock, demand and margin analysis",
   "private": true,
   "scripts": {
     "dev": "tsx src/index.ts",

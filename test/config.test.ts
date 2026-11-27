@@ -5,7 +5,7 @@ import {
   loadConfig,
   DEFAULT_MODEL,
   DEFAULT_TIMEOUT_MS,
-  DEFAULT_APPROVAL_LIMIT_EUR,
+  DEFAULT_APPROVAL_LIMIT_RSD,
   DEFAULT_REQUESTS_PER_MINUTE,
   parseApprovals,
 } from '../src/config.js';
@@ -25,7 +25,7 @@ test('uses defaults', () => {
   assert.deepEqual(loadConfig({ GEMINI_API_KEY: 'k' }), {
     models: [DEFAULT_MODEL],
     timeoutMs: DEFAULT_TIMEOUT_MS,
-    approvalLimitEur: DEFAULT_APPROVAL_LIMIT_EUR,
+    approvalLimitRsd: DEFAULT_APPROVAL_LIMIT_RSD,
     requestsPerMinute: DEFAULT_REQUESTS_PER_MINUTE,
   });
 });
@@ -37,17 +37,17 @@ test('reads overrides', () => {
       GEMINI_MODEL: 'm',
       FALLBACK_MODELS: ' f1, ,f2 ',
       RUN_TIMEOUT_MS: '5000',
-      APPROVAL_LIMIT_EUR: '1000.5',
+      APPROVAL_LIMIT_RSD: '1000.5',
       REQUESTS_PER_MINUTE: '15',
     }),
-    { models: ['m', 'f1', 'f2'], timeoutMs: 5000, approvalLimitEur: 1000.5, requestsPerMinute: 15 }
+    { models: ['m', 'f1', 'f2'], timeoutMs: 5000, approvalLimitRsd: 1000.5, requestsPerMinute: 15 }
   );
 });
 
 test('rejects invalid approval limit', () => {
   assert.throws(
-    () => loadConfig({ GEMINI_API_KEY: 'k', APPROVAL_LIMIT_EUR: '-1' }),
-    /APPROVAL_LIMIT_EUR/
+    () => loadConfig({ GEMINI_API_KEY: 'k', APPROVAL_LIMIT_RSD: '-1' }),
+    /APPROVAL_LIMIT_RSD/
   );
 });
 
