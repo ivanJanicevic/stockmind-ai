@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "demo": "tsx src/index.ts --dashboard",
-    "record": "tsx src/index.ts --record",
+    "record": "tsx src/index.ts --record --correct 07=data/korekcije/faktura-07-sokovi-dopuna-korekcija.pdf",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "build": "tsc",

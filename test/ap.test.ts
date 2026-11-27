@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { loadPurchases } from '../src/data/load.js';
 import { blockingFailures, decide, loadCases, loadMaster, matchInvoice, missingDocuments, type ApCase } from '../src/ap.js';
 import { idealInvoice, idealNote } from './ideal.js';
+import { pdfText } from '../src/pdf.js';
 
 const purchases = loadPurchases();
 const master = loadMaster();
@@ -80,4 +81,32 @@ test('register invoices without a document are reported, not paid', () => {
     missingDocuments(purchases, cases).map((m) => [m.invoiceNo, m.totalInclVat]),
     [['R-47/2026', 8668], ['F-ZP-2026-01262', 44040], ['F-MD-2026-55390', 15523.2]]
   );
+});
+
+// A held invoice replaced by the supplier's corrected invoice (see submitCorrection).
+function corrected(pdfText: string): ApCase {
+  const c = runDesk().get('F-OPT-2026-0988')!;
+  c.history = [{ version: 1, invoiceNo: 'F-OPT-2026-0988', supplier: c.invoice!.supplierName.value, invoicePdf: c.invoicePdf, decision: 'held', problems: [], atStakeRsd: 2016 }];
+  c.corrects = { invoiceNo: 'F-OPT-2026-0988', pib: c.invoice!.supplierPib.value };
+  Object.assign(c, { version: 2, invoiceText: pdfText, invoiceRef: 'uploads/07-v2.txt', invoice: idealInvoice(pdfText) });
+  c.checks = matchInvoice(c, purchases, master);
+  return c;
+}
+const correctedText = () => pdfText(readFileSync(new URL('../data/korekcije/faktura-07-sokovi-dopuna-korekcija.pdf', import.meta.url)));
+
+test('a corrected invoice is matched against the same delivery note and the original agreed prices', () => {
+  const c = corrected(correctedText());
+  assert.deepEqual(failed(c), []);
+  assert.equal(decide(c, LIMIT), 'ready');
+  assert.match(c.checks.find((x) => x.name === 'replaces_original')!.detail, /F-OPT-2026-1003 states it replaces F-OPT-2026-0988/);
+  assert.match(c.checks.find((x) => x.name === 'in_purchase_register')!.detail, /agreed lines for F-OPT-2026-0988/);
+});
+
+test('a "correction" that is the original again, or does not name it, stays held', () => {
+  const original = runDesk().get('F-OPT-2026-0988')!.invoiceText;
+  const same = corrected(original);
+  assert.deepEqual(failed(same).map(([name]) => name), ['replaces_original', 'quantity OPT-SP-025']);
+  const unnamed = corrected(correctedText().replace(/^Korigovani račun.*\n/m, ''));
+  assert.deepEqual(failed(unnamed).map(([name]) => name), ['replaces_original']);
+  assert.equal(decide(unnamed, LIMIT), 'held');
 });

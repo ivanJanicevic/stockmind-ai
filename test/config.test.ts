@@ -8,12 +8,19 @@ import {
   DEFAULT_APPROVAL_LIMIT_RSD,
   DEFAULT_REQUESTS_PER_MINUTE,
   parseApprovals,
+  parseCorrections,
 } from '../src/config.js';
 
 test('parseApprovals reads --approve lists and repeats', () => {
   assert.deepEqual(parseApprovals(['--approve', 'INV-1004,inv-1006']), ['INV-1004', 'INV-1006']);
   assert.deepEqual(parseApprovals(['--approve=INV-1004', '--approve', 'INV-1001']), ['INV-1004', 'INV-1001']);
   assert.deepEqual(parseApprovals([]), []);
+});
+
+test('parseCorrections reads --correct <case>=<pdf>', () => {
+  assert.deepEqual([...parseCorrections(['--correct', '7=a/b.pdf', '--correct=08=c.PDF'])], [['07', 'a/b.pdf'], ['08', 'c.PDF']]);
+  assert.deepEqual([...parseCorrections(['--approve', 'X'])], []);
+  assert.throws(() => parseCorrections(['--correct', 'a/b.pdf']), /--correct expects/);
 });
 
 test('fails when GEMINI_API_KEY is missing', () => {

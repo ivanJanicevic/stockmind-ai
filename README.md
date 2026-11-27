@@ -30,7 +30,7 @@ Every row below is found by code from `data/`, and the tests in `test/` pin each
 | --- | --- | --- |
 | Coca-Cola invoiced above the agreed price | faktura-04: 79,00 vs agreed 72,00 per bottle | invoice held, 806,40 RSD at stake, claim drafted |
 | Espresso beans over-invoiced | faktura-05: 22 invoiced, 20 on the delivery note | held, 5.880,00 RSD, claim |
-| Sprite over-invoiced | faktura-07: 72 invoiced, 48 delivered | held, 2.016,00 RSD, claim |
+| Sprite over-invoiced | faktura-07: 72 invoiced, 48 delivered | held, 2.016,00 RSD, claim; the supplier's corrected invoice F-OPT-2026-1003 (`data/korekcije/`) is ready after the re-check |
 | Jelen beer over-invoiced | faktura-08: 140 invoiced, 120 delivered | held, 2.880,00 RSD, claim |
 | Oat drink expired on delivery | otpremnica-03: expired 20.11.2026, delivered 26.11.2026 | held, 3.744,00 RSD, claim (short-dated cream is a warning) |
 | Large clean invoice | faktura-01: 89.024,00 RSD, above the 50.000 RSD agent limit | waits for `--approve` |
@@ -117,7 +117,8 @@ Section 6 of `out/review.md`, `out/recommendations.csv` and `out/sales-by-produc
 | `src/index.ts` | Mozaik runtime, agents, event coordination, rate-limited queue, retries, output |
 | `src/agents.ts` | Agent instructions (INPUT / TASK / OUTPUT / RULES) and JSON Schemas |
 | `src/documents.ts` | Invoice and delivery-note answers: parsing and verification against the text |
-| `src/ap.ts` | Three-way match, payment decision, missing documents |
+| `src/ap.ts` | Three-way match, payment decision, missing documents, corrected-invoice check |
+| `src/pdf.ts` | Text layer of an uploaded PDF (corrected invoices), no dependencies |
 | `src/analytics.ts` | Stock check, weekly trend, price rises, margins, period result |
 | `src/planning.ts` | Sales and profit by product, lots and expiry risk, promotion candidates, replenishment, recommendation CSVs |
 | `src/findings.ts` | Guards for analyst findings and the review |
@@ -142,6 +143,7 @@ npm run dev
 - **Output:** `out/review.md`, `out/payment-draft.csv`, `out/recommendations.csv` and `out/sales-by-product.csv`.
 - **Live dashboard:** `npm run demo` runs the same desk and serves http://127.0.0.1:3000 (`DASHBOARD_PORT` to change it). Every agent loop appears as a bar on a timeline, so you can see them overlap, and the invoices update as they are matched. The page stays open after the run; press Ctrl+C to exit. It's optional: if the port is taken, the run continues without it.
 - **Human approval:** to approve the invoice above the limit as the human approver, run `npm run dev -- --approve F-ZP-2026-01184`. It is then added to the payment draft as "Approved by human". Approving a held invoice has no effect.
+- **Corrected invoice:** when a supplier answers a hold with a corrected invoice, open the held invoice in the dashboard and use **Upload corrected invoice (PDF)**, or pass it on the command line: `npm run dev -- --correct 07=data/korekcije/faktura-07-sokovi-dopuna-korekcija.pdf` (a synthetic correction of F-OPT-2026-0988). See [Corrected invoices](#corrected-invoices).
 
 End of a run: the invoice decisions are deterministic, while finding counts depend on the model:
 
@@ -176,10 +178,25 @@ Payment draft: out/payment-draft.csv (1 orders, 35.102,80 RSD)
 - The peers mirror the agent names for visibility only. They receive no data and do no work; the collaboration happens in the local Mozaik runtime.
 - Joining runs in the background with a 15 s timeout and can never stop a run. The report shows the Network status.
 
+## Corrected invoices
+
+A hold usually ends with the supplier sending a corrected invoice. The desk re-checks it with the same rules:
+
+1. **Only a held invoice** can be replaced, and only once its agents are done (at most 2 corrections; then by hand). Ready, approved and waiting-for-approval invoices can't.
+2. The PDF's text is read by `src/pdf.ts` (no dependencies). A scan or a file without text is rejected.
+3. **A new Invoice Clerk** (a new agent that runs once, `Invoice Clerk 07 · v2`) reads it, and its answer is verified against that text like any other.
+4. **Code runs the same three-way match** against the **unchanged delivery note** and the agreed prices of the **original** invoice number. One more blocking check, `replaces_original`: the corrected invoice must have a new number, name the invoice it replaces, and come from the same supplier (PIB).
+5. **Same decision rules:** ready, needs approval above the limit (approvals are per invoice number), or held again with a new claim. If the clerk fails or doesn't answer, the invoice stays held.
+6. **History:** the held version, its problems and its claim stay on the case, in the dashboard and in `out/review.md`. The payment draft and report are rewritten.
+
+**The delivery note is never replaced to clear a hold.** It is our own record of what physically arrived. If a supplier could send a "fixed" delivery note that matches their invoice, the three-way match would mean nothing.
+
+`data/korekcije/faktura-07-sokovi-dopuna-korekcija.pdf` is made by `scripts/make-corrected-invoice.ts` from the original PDF: same layout and fonts, the Sprite quantity set to the delivered 48, and every total recomputed (26.380,80 RSD).
+
 ## Demo material
 
 **Publishing the replay demo** (GitHub Pages, no hosting cost, no API key on the site):
-1. `npm run record` does one real run (about 24 model calls) and writes `docs/demo/replay.json`, with every state change of the run, plus copies of the PDFs.
+1. `npm run record` does one real run (about 25 model calls) and writes `docs/demo/replay.json`, with every state change of the run, plus copies of the PDFs. It includes the corrected invoice for F-OPT-2026-0988 (`--correct 07=…`), so the replay shows a hold being resolved.
 2. Commit `docs/` and push.
 3. On GitHub, go to Settings → Pages → Deploy from branch → `main` / `/docs`.
 
@@ -199,7 +216,7 @@ npm run typecheck
 
 ## Limitations
 
-- **PDF text.** It is pre-extracted to `data/text/*.txt` with macOS PDFKit (`scripts/extract-pdf-text.sh`); the app reads the text, not the PDF.
+- **PDF text.** For the sample documents it is pre-extracted to `data/text/*.txt` with macOS PDFKit (`scripts/extract-pdf-text.sh`). Uploaded corrected invoices are read by `src/pdf.ts`, which handles text PDFs like these (Flate/ASCII85 streams, ToUnicode or WinAnsi fonts); a test checks it gives the same lines as PDFKit for all 14 sample PDFs. Scans and encrypted PDFs are rejected.
 - **Bank accounts.** The supplier accounts are synthetic placeholders that don't pass the Serbian mod-97 control, so only their format and the supplier-master match are checked.
 - **Stock** is deliveries (purchase register) minus recipe consumption. There is no physical stock count.
 - **Period result** is a run-rate: gross margin per day × 30 − that month's fixed costs (excl. VAT). Cost of goods uses recipe cost at the purchase price in force on each sale date. The period is split at the first supplier price rise (2026-12-10). The trend uses 4 full weeks.
@@ -220,6 +237,7 @@ npm run typecheck
 ```bash
 npm run dev        # Run the desk (calls the model)
 npm run demo       # Same, with the live dashboard on http://127.0.0.1:3000
+npm run record     # A real run (with the sample corrected invoice) saved to docs/demo/ for the replay
 npm test           # Unit tests, no API calls
 npm run typecheck  # Type-check
 npm run build      # Compile to dist/

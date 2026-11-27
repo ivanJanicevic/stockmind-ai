@@ -14,7 +14,26 @@ export interface DashboardHandle {
   url: string;
 }
 
-type Approve = (invoiceNo: string) => { ok: boolean; message: string };
+type Result = { ok: boolean; message: string };
+export interface DashboardActions {
+  approve: (invoiceNo: string) => Result;
+  // A supplier's corrected invoice (PDF bytes) for a held case.
+  correct: (caseId: string, pdf: Buffer, fileName: string) => Result;
+  uploadsDir: string;
+}
+
+const MAX_UPLOAD_BYTES = 5_000_000;
+const readBytes = (req: IncomingMessage) =>
+  new Promise<Buffer | null>((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size <= MAX_UPLOAD_BYTES) chunks.push(chunk); // beyond: drained, so the 413 still reaches the browser
+    });
+    req.on('end', () => resolve(size > MAX_UPLOAD_BYTES ? null : Buffer.concat(chunks)));
+    req.on('error', () => resolve(null));
+  });
 
 const readBody = (req: IncomingMessage) =>
   new Promise<string>((resolve) => {
@@ -26,9 +45,9 @@ const readBody = (req: IncomingMessage) =>
     req.on('end', () => resolve(body));
   });
 
-export function startDashboard(port: number, snapshot: () => unknown, approve: Approve): Promise<DashboardHandle | null> {
-  // Approvals need this per-run token in a custom header, so another web page
-  // open in the same browser can't post an approval to localhost.
+export function startDashboard(port: number, snapshot: () => unknown, actions: DashboardActions): Promise<DashboardHandle | null> {
+  // Approvals and uploads need this per-run token in a custom header, so
+  // another web page open in the same browser can't post them to localhost.
   const token = randomUUID();
   return new Promise((resolve) => {
     const server = createServer(async (req, res) => {
@@ -50,16 +69,36 @@ export function startDashboard(port: number, snapshot: () => unknown, approve: A
         } catch {
           // handled below
         }
-        const result = invoiceNo ? approve(invoiceNo) : { ok: false, message: 'invoiceNo missing' };
+        const result = invoiceNo ? actions.approve(invoiceNo) : { ok: false, message: 'invoiceNo missing' };
         res.writeHead(result.ok ? 200 : 409, { 'content-type': 'application/json' });
         res.end(JSON.stringify(result));
         return;
       }
-      // The original PDFs, only the ones the run actually uses.
-      const doc = /^\/doc\/(fakture|otpremnice)\/([a-z0-9-]+\.pdf)$/.exec(url.pathname);
+      if (url.pathname === '/correct' && req.method === 'POST') {
+        const json = (status: number, result: Result) => {
+          res.writeHead(status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(result));
+        };
+        if (req.headers['x-stockmind-token'] !== token) return json(403, { ok: false, message: 'missing or wrong token' });
+        const caseId = String(req.headers['x-case'] ?? '');
+        let fileName = String(req.headers['x-file-name'] ?? 'upload.pdf');
+        try {
+          fileName = decodeURIComponent(fileName);
+        } catch {
+          // keep it as sent
+        }
+        fileName = fileName.replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 120) || 'upload.pdf';
+        const pdf = await readBytes(req);
+        if (!pdf) return json(413, { ok: false, message: `file too large (max ${MAX_UPLOAD_BYTES / 1_000_000} MB)` });
+        if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') return json(415, { ok: false, message: `${fileName} is not a PDF` });
+        const result = actions.correct(caseId, pdf, fileName);
+        return json(result.ok ? 200 : 409, result);
+      }
+      // The PDFs the run uses: data/ originals, and corrected invoices uploaded in this run.
+      const doc = /^\/doc\/(fakture|otpremnice|uploads)\/([a-z0-9-]+\.pdf)$/.exec(url.pathname);
       if (doc) {
         try {
-          const file = readFileSync(`${DATA_DIR}${doc[1]}/${doc[2]}`);
+          const file = readFileSync(doc[1] === 'uploads' ? `${actions.uploadsDir}/${doc[2]}` : `${DATA_DIR}${doc[1]}/${doc[2]}`);
           res.writeHead(200, { 'content-type': 'application/pdf' });
           res.end(file);
         } catch {
@@ -207,6 +246,7 @@ footer{color:var(--dim);font-size:12px;margin-top:26px}
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
 <div id="tip"></div>
+<input type="file" id="upfile" accept="application/pdf,.pdf" style="display:none" onchange="uploadCorrection(this.files[0])">
 <script>
 const TOKEN='__TOKEN__', MODE='__MODE__';
 let R=null,playT=0,last=Date.now(),speed=4,paused=false;const simApproved=new Set();
@@ -289,7 +329,7 @@ function render(){
   $('nav').innerHTML=[['overview','Overview'],['payments','Payment run'],['agents','Agents'],['insights','Insights'],['inventory','Inventory']].map(([k,t])=>'<button title="'+t+'" class="'+(view===k?'on':'')+'" '+(k==='payments'&&waiting.length?'data-n="'+waiting.length+'"':'')+' onclick="go(\\''+k+'\\')">'+svg(k)+'</button>').join('');
   let b='';
   if(MODE==='replay'&&R){const end=R.frames[R.frames.length-1].t;b+='<div class="banner rp"><span style="font-size:20px">▶</span><div class="grow"><b style="color:var(--violet)">Replay of a real run</b><div class="muted" style="font-size:13px">Recorded '+esc(R.recordedAt)+' · '+esc(R.model)+' · '+R.frames.length+' state changes. Nothing here calls a model; approvals are simulated in your browser.</div></div><button class="btn" onclick="playT=0">⏮</button><button class="btn" onclick="paused=!paused">'+(paused?'▶':'⏸')+'</button>'+[1,4,16].map(x=>'<button class="btn '+(speed===x?'primary':'')+'" onclick="speed='+x+'">'+x+'×</button>').join('')+'<button class="btn" onclick="playT='+end+'">⏭</button><span class="muted" style="min-width:80px;text-align:right">'+(playT/1000).toFixed(0)+' / '+(end/1000).toFixed(0)+' s</span></div>';}
-  if(waiting.length)b+='<div class="banner"><span style="font-size:20px">⏸</span><div class="grow"><b class="warn">'+waiting.length+' invoice'+(waiting.length>1?'s':'')+' waiting for your approval</b><div class="muted" style="font-size:13px">'+waiting.map(c=>esc(c.invoiceNo)+' · '+rsd(c.amount)).join(' · ')+' — every check passed, but above the agent limit of '+rsd(S.limitRsd)+'.</div></div><button class="btn primary" onclick="openReview(\\''+esc(waiting[0].invoiceNo)+'\\')">Review &amp; approve</button></div>';
+  if(waiting.length)b+='<div class="banner"><span style="font-size:20px">⏸</span><div class="grow"><b class="warn">'+waiting.length+' invoice'+(waiting.length>1?'s':'')+' waiting for your approval</b><div class="muted" style="font-size:13px">'+waiting.map(c=>esc(c.invoiceNo)+' · '+rsd(c.amount)).join(' · ')+' — every check passed, but above the agent limit of '+rsd(S.limitRsd)+'.</div></div><button class="btn primary" onclick="openReview(\\''+esc(waiting[0].id)+'\\')">Review &amp; approve</button></div>';
   $('banners').innerHTML=b;
   $('view').innerHTML=({overview,payments,agents,insights,inventory})[view]();
   if(openInv)renderReview();
@@ -322,7 +362,7 @@ function sparkline(){
   const pts=d.map((x,i)=>[i/(d.length-1)*W,H-6-x.net/max*(H-12)]);let p='M'+pts[0][0]+' '+pts[0][1];for(let i=1;i<pts.length;i++){const [x0,y0]=pts[i-1],[x1,y1]=pts[i],cx=(x0+x1)/2;p+=' C'+cx+' '+y0+' '+cx+' '+y1+' '+x1+' '+y1;}
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:70px"><defs><linearGradient id="sg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="rgba(62,207,155,.35)"/><stop offset="1" stop-color="rgba(62,207,155,0)"/></linearGradient></defs><path d="'+p+' L'+W+' '+H+' L0 '+H+' Z" fill="url(#sg)"/><path d="'+p+'" fill="none" stroke="var(--mint)" stroke-width="3" stroke-linecap="round"/></svg>';
 }
-function invList(rows){return '<div class="list">'+(rows.length?rows.map(c=>{const h=hue(c.supplier);return '<div class="item" onclick="openReview(\\''+esc(c.invoiceNo)+'\\')"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.supplier||'Reading…')+'</b><span>'+esc(c.invoiceNo)+'</span></div><div class="a">'+rsd(c.amount)+'<span class="s-'+c.status+'">'+LABEL[c.status]+'</span></div></div>';}).join(''):'<div class="empty">no invoice matches</div>')+'</div>';}
+function invList(rows){return '<div class="list">'+(rows.length?rows.map(c=>{const h=hue(c.supplier);return '<div class="item" onclick="openReview(\\''+esc(c.id)+'\\')"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.supplier||'Reading…')+'</b><span>'+esc(c.invoiceNo)+'</span></div><div class="a">'+rsd(c.amount)+'<span class="s-'+c.status+'">'+LABEL[c.status]+'</span></div></div>';}).join(''):'<div class="empty">no invoice matches</div>')+'</div>';}
 function overview(){
   const running=S.timeline.filter(isActive).length;
   const ready=S.cases.filter(c=>c.status==='ready'||c.status==='approved');
@@ -352,7 +392,7 @@ function payments(){
     const r=[...c.errors.map(e=>'<li class="bad">'+esc(e)+'</li>'),...f.map(x=>'<li>'+esc(x.detail)+(x.impactRsd?' <span class="stake">'+rsd(x.impactRsd)+'</span>':'')+(x.sources&&x.sources.length?checkCite(c,x):'')+'</li>'),...w.map(x=>'<li class="warn">⚠ '+esc(x.detail)+'</li>')];
     if(c.status==='needs_approval')r.push('<li>All '+c.checks.length+' checks passed · above the agent limit</li>');if(c.status==='ready')r.push('<li class="ok">All '+c.checks.length+' checks passed</li>');if(c.approvedBy)r.push('<li class="ok">Approved — '+esc(c.approvedBy)+'</li>');if(c.claim)r.push('<li>✉ Claim drafted to '+esc(c.claim.to)+'</li>');
     const h=hue(c.supplier);
-    return '<div class="card inv" onclick="openReview(\\''+esc(c.invoiceNo)+'\\')"><div class="item" style="padding:0;cursor:inherit"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.invoiceNo)+'</b><span>'+esc(c.supplier||'Reading…')+'</span></div><div class="a">'+rsd(c.amount)+'</div></div><div style="margin-top:12px"><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span></div><ul class="reasons">'+r.join('')+'</ul></div>';}).join('')+'</div>';
+    return '<div class="card inv" onclick="openReview(\\''+esc(c.id)+'\\')"><div class="item" style="padding:0;cursor:inherit"><div class="ico" style="background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><b>'+esc(c.invoiceNo)+'</b><span>'+esc(c.supplier||'Reading…')+'</span></div><div class="a">'+rsd(c.amount)+'</div></div><div style="margin-top:12px"><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span>'+(c.version>1?' <span class="badge b-reading">v'+c.version+' · corrected</span>':'')+'</div><ul class="reasons">'+r.join('')+'</ul></div>';}).join('')+'</div>';
 }
 const RI={invoice:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',note:'<path d="M2 6h11v10H2z"/><path d="M13 9h4l4 4v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',stock:'<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/>',sales:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',margin:'<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',planner:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',claims:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',reviewer:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/>',code:'<path d="M12 3v18M8 21h8M4 7h16M4 7l-2.5 6a3 3 0 0 0 5 0zM20 7l-2.5 6a3 3 0 0 0 5 0z"/>',docs:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',you:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>'};
 // One card per role: what it reads, what it produces, and the rule that checks it.
@@ -442,7 +482,7 @@ function closeReview(){openInv=null;$('modal').classList.remove('on');}
 $('modal').addEventListener('click',(e)=>{if(e.target.id==='modal')closeReview();});
 addEventListener('keydown',(e)=>{if(e.key==='Escape')closeReview();});
 function renderReview(){
-  const c=S.cases.find(x=>x.invoiceNo===openInv);if(!c)return;const can=c.status==='needs_approval',fails=c.checks.filter(x=>!x.ok);
+  const c=S.cases.find(x=>x.id===openInv);if(!c)return;const can=c.status==='needs_approval',fails=c.checks.filter(x=>!x.ok);
   const pre=MODE==='live'?'/doc/':'doc/',ipdf=pre+c.invoicePdf.replace('data/',''),npdf=pre+c.notePdf.replace('data/',''),h=hue(c.supplier);
   const qi=(l)=>({t:'Invoice line '+l.code+' as the invoice clerk read it',q:l.quote,qf:'the invoice',href:ipdf,n:'Code checked that every value is in this printed row before it was used.'});
   const qn=(l)=>({t:'Delivery note line '+l.code+' as the receiving clerk read it',q:l.noteQuote,qf:'the delivery note',href:npdf,n:'Read by a different agent from a different document; code compares the two.'});
@@ -452,12 +492,16 @@ function renderReview(){
   const policy=can?'<div class="policy"><b class="warn">Why it waits for you</b><div class="muted">Every check passed, but '+rsd(c.amount)+' is above the agent limit of '+rsd(S.limitRsd)+'. Approving adds it to the payment draft — a file; nothing is paid or sent.</div></div>'
     :c.status==='held'?'<div class="policy"><b class="bad">Held — can\\'t be approved</b><div class="muted">Resolve the problems above with the supplier first (a claim is drafted below when the documents show a discrepancy). Approval never overrides a failed check.</div></div>'
     :c.status==='approved'?'<div class="policy"><b class="ok">Approved</b><div class="muted">'+esc(c.approvedBy)+' · it is in the payment draft.</div></div>':c.status==='ready'?'<div class="policy"><b class="ok">Ready</b><div class="muted">Within the agent limit — no approval needed. It is in the payment draft.</div></div>':'<div class="policy muted">The clerks are still reading this invoice and its delivery note…</div>';
+  const corr=c.status!=='held'?'':MODE==='live'?'<div class="policy" style="border-color:rgba(124,184,255,.35)"><b style="color:var(--info)">📎 Did the supplier send a corrected invoice?</b><div class="muted">Upload it as a PDF. A new invoice clerk reads it, and code runs the same three-way match again: against this delivery note and the agreed prices of '+esc(c.corrects||c.invoiceNo)+'. The delivery note is never replaced: it is our record of what arrived.'+(c.id==='07'&&c.version===1?' A sample is in <code>data/korekcije/</code>.':'')+'</div><div style="margin-top:10px"><button class="btn primary" onclick="pickCorrection(\\''+esc(c.id)+'\\')">Upload corrected invoice (PDF)</button></div></div>'
+    :'<div class="policy dim">In the live dashboard (npm run demo) a person can upload the supplier\\'s corrected invoice here; it is read by a new invoice clerk and matched again against the same delivery note.</div>';
+  const hist=c.history&&c.history.length?'<div class="policy"><b>Versions of this invoice</b>'+c.history.map(v=>'<div class="check"><span class="ic dim" style="width:26px">v'+v.version+'</span><span><b>'+esc(v.invoiceNo)+'</b> — <span class="s-'+v.decision+'">'+LABEL[v.decision]+'</span>'+(v.atStakeRsd?' <span class="stake">'+rsd(v.atStakeRsd)+'</span>':'')+(v.problems.length?' · '+esc(v.problems.join('; ')):'')+(v.claim?' · ✉ claim drafted to '+esc(v.claim.to):'')+' · <a href="'+pre+v.invoicePdf+'" target="_blank">PDF</a></span></div>').join('')+
+    '<div class="check"><span class="ic ok" style="width:26px">v'+c.version+'</span><span><b>'+esc(c.invoiceNo)+'</b> — <span class="s-'+c.status+'">'+LABEL[c.status]+'</span> · corrected invoice, checked above against the same delivery note</span></div></div>':'';
   const claim=c.claim?'<div class="policy"><b>✉ Claim draft (not sent) — to '+esc(c.claim.to)+'</b><div class="muted" style="margin:6px 0">'+esc(c.claim.subject)+'</div><div style="white-space:pre-wrap;font-size:13px">'+esc(c.claim.body)+'</div></div>':c.claimError?'<div class="policy dim">Claim writer: '+esc(c.claimError)+'</div>':'';
-  $('sheet').innerHTML='<div class="item" style="padding:0;cursor:default"><div class="ico" style="width:48px;height:48px;background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><h2>'+esc(c.invoiceNo)+'</h2><span>'+esc(c.supplier)+'</span></div><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span><button class="btn" style="margin-left:8px" onclick="closeReview()">✕</button></div>'+
+  $('sheet').innerHTML='<div class="item" style="padding:0;cursor:default"><div class="ico" style="width:48px;height:48px;background:hsla('+h+',60%,55%,.16);color:hsl('+h+',70%,70%)">'+ini(c.supplier)+'</div><div class="t"><h2>'+esc(c.invoiceNo)+'</h2><span>'+esc(c.supplier)+'</span></div><span class="badge b-'+c.status+'">'+LABEL[c.status]+'</span>'+(c.version>1?'<span class="badge b-reading" style="margin-left:6px">v'+c.version+' · replaces '+esc(c.corrects)+'</span>':'')+'<button class="btn" style="margin-left:8px" onclick="closeReview()">✕</button></div>'+
     (()=>{const qq=c.quotes||{},H=(x,q,t)=>q?cite(x,{t:t,q:q,qf:'the invoice',href:ipdf}):x;return '<div class="meta"><div><span>Total to pay</span><b>'+H(rsd(c.amount),qq.amount,'Total to pay (Za uplatu)')+'</b></div><div><span>Issued → due</span>'+H(esc(c.issueDate),qq.issueDate,'Issue date')+' → '+H(esc(c.dueDate),qq.dueDate,'Due date')+'</div><div><span>Supplier PIB</span>'+H(esc(c.pib),qq.pib,'Supplier PIB')+'</div><div><span>Account</span>'+H(esc(c.account),qq.account,'Supplier account')+'</div></div>';})()+
     '<div class="muted" style="font-size:13px;margin-bottom:8px">📄 <a href="'+ipdf+'" target="_blank">Invoice PDF</a> · <a href="'+npdf+'" target="_blank">Delivery note PDF</a> · hover a dotted figure to see the printed row · '+c.checks.filter(x=>x.ok).length+' checks passed, '+fails.length+' failed</div>'+
     '<table><tr><th>Code</th><th>Item</th><th class="n">Invoiced</th><th class="n">Delivered</th><th class="n">Price</th><th class="n">VAT</th><th class="n">Total</th><th>Expiry</th></tr>'+lines+'</table>'+
-    '<div style="margin-top:16px"><b>Checks</b>'+checks+'</div>'+policy+claim+
+    '<div style="margin-top:16px"><b>Checks</b>'+checks+'</div>'+hist+policy+claim+corr+
     '<div class="actions"><button class="btn" onclick="closeReview()">Close</button>'+(can?'<button class="btn go" id="appr" onclick="approve(\\''+esc(c.invoiceNo)+'\\')">Approve for payment</button>':'')+'</div>';
 }
 async function approve(no){
@@ -465,6 +509,14 @@ async function approve(no){
   if(!confirm('Approve '+no+' for the payment draft?\\n\\nThis only adds it to out/payment-draft.csv — nothing is paid or sent.'))return;
   const b=$('appr');if(b)b.disabled=true;
   try{const r=await fetch('/approve',{method:'POST',headers:{'content-type':'application/json','x-stockmind-token':TOKEN},body:JSON.stringify({invoiceNo:no})});const j=await r.json();toast((j.ok?'✓ ':'✗ ')+j.message);}catch(e){toast('✗ could not reach the dashboard');}
+}
+// Corrected invoice upload: a file input outside the sheet, which re-renders while the run is live.
+let upId=null;
+function pickCorrection(id){upId=id;const f=$('upfile');f.value='';f.click();}
+async function uploadCorrection(f){
+  if(!f||!upId)return;toast('Uploading '+f.name+'…');
+  try{const r=await fetch('/correct',{method:'POST',headers:{'content-type':'application/pdf','x-stockmind-token':TOKEN,'x-case':upId,'x-file-name':encodeURIComponent(f.name)},body:f});const j=await r.json();toast((j.ok?'✓ ':'✗ ')+j.message);}
+  catch(e){toast('✗ could not reach the dashboard');}
 }
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),4500);}
 tick();

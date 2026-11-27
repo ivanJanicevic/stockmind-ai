@@ -13,6 +13,7 @@ Sintetički izvoz prometa iz ESIR kase za hakaton demo. Svi podaci su izmišljen
 | `nabavne_cene.csv` | Nabavne (ugovorene) cene po fakturama i količine sa otpremnica, uključujući poskupljenje |
 | `troskovi.csv` | Mesečni operativni troškovi okt–dec 2026 |
 | `fakture/*.pdf`, `otpremnice/*.pdf` | 7 faktura i 7 otpremnica (faktura/otpremnica 02 – pekara – nije u setu); `fakture/scenariji-fakture.md` opisuje zamke |
+| `korekcije/faktura-07-sokovi-dopuna-korekcija.pdf` | Korigovani račun F-OPT-2026-1003 koji zamenjuje F-OPT-2026-0988 (Sprite: fakturisano 48 = isporučeno); pravi ga `scripts/make-corrected-invoice.ts` iz originala, za demo ponovne provere |
 | `text/*.txt` | Tekstualni sloj PDF-ova (`scripts/extract-pdf-text.sh`); aplikacija čita ove fajlove |
 | `dobavljaci.json` | Matični podaci kupca i dobavljača (PIB, račun, e-mail – izmišljeno) |
 | `planiranje.json` | **Sintetički** planski parametri za demo (rok isporuke po dobavljaču, sigurnosna zaliha, period pregleda) – dataset ih ne sadrži; bez ovog fajla aplikacija ne predlaže količine za narudžbinu |

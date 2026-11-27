@@ -36,6 +36,21 @@ export function parseApprovals(argv: string[]): string[] {
   return ids;
 }
 
+// `--correct 07=data/korekcije/x.pdf` (repeatable): a supplier's corrected
+// invoice for case 07, submitted once that case is held, as a person would in
+// the dashboard. Returns case id (two digits) → PDF path.
+export function parseCorrections(argv: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  argv.forEach((arg, i) => {
+    const value = arg.startsWith('--correct=') ? arg.slice('--correct='.length) : arg === '--correct' ? argv[i + 1] : undefined;
+    if (value === undefined) return;
+    const m = /^(\d{1,2})=(.+\.pdf)$/i.exec(value.trim());
+    if (!m) throw new Error(`--correct expects <case>=<file.pdf>, e.g. --correct 07=data/korekcije/faktura-07-sokovi-dopuna-korekcija.pdf (got "${value}")`);
+    out.set(m[1]!.padStart(2, '0'), m[2]!);
+  });
+  return out;
+}
+
 // GEMINI_API_KEY is read by Mozaik itself; we only check it exists so a
 // missing key fails at startup with a clear message instead of deep in the SDK.
 export function loadConfig(env: NodeJS.ProcessEnv): Config {

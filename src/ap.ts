@@ -22,11 +22,31 @@ export interface Claim {
   body: string;
 }
 
+// An earlier version of a case's invoice, kept when the supplier sends a
+// corrected invoice: what it was, why it was held, and the claim it got.
+export interface Revision {
+  version: number;
+  invoiceNo: string;
+  supplier: string;
+  invoicePdf: string;
+  decision: Decision;
+  problems: string[];
+  atStakeRsd: number;
+  claim?: Claim;
+}
+
 // Shared runtime state: one case per invoice + delivery-note pair.
 export interface ApCase {
   id: string; // "04" from faktura-04-…
   invoiceFile: string;
   noteFile: string;
+  invoicePdf: string; // the document of record, e.g. data/fakture/faktura-04-….pdf
+  invoiceRef: string; // its text layer, as cited in checks, e.g. text/faktura-04-….txt
+  version: number; // 1, then +1 for every corrected invoice
+  // Set once the supplier sent a corrected invoice: the held original it
+  // replaces (agreed lines in the purchase register are keyed by its number).
+  corrects?: { invoiceNo: string; pib: string };
+  history: Revision[];
   invoiceText: string;
   noteText: string;
   invoice?: InvoiceDoc;
@@ -72,6 +92,10 @@ export function loadCases(files: string[]): ApCase[] {
         id: /faktura-(\d+)/.exec(invoiceFile)![1]!,
         invoiceFile,
         noteFile,
+        invoicePdf: `data/fakture/${invoiceFile.replace(/\.txt$/, '.pdf')}`,
+        invoiceRef: `text/${invoiceFile}`,
+        version: 1,
+        history: [],
         invoiceText: readText(`text/${invoiceFile}`),
         noteText: readText(`text/${noteFile}`),
         checks: [],
@@ -86,7 +110,7 @@ export const findSupplier = (master: Master, pib: string) => master.dobavljaci.f
 export function matchInvoice(c: ApCase, purchases: Purchase[], master: Master): Check[] {
   const inv = c.invoice!;
   const note = c.note!;
-  const invSrc = `text/${c.invoiceFile}`;
+  const invSrc = c.invoiceRef;
   const noteSrc = `text/${c.noteFile}`;
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string, sources: string[], impactRsd = 0, blocking = true) =>
@@ -108,8 +132,24 @@ export function matchInvoice(c: ApCase, purchases: Purchase[], master: Master): 
   add('same_supplier', compact(note.supplierPib.value) === compact(inv.supplierPib.value), `invoice PIB ${inv.supplierPib.value}, delivery note PIB ${note.supplierPib.value}`, [invSrc, noteSrc]);
   add('note_reference', compact(inv.deliveryNote.value) === compact(note.noteNumber.value), `invoice refers to ${inv.deliveryNote.value}, delivery note is ${note.noteNumber.value}`, [invSrc, noteSrc]);
 
-  const register = purchases.filter((p) => compact(p.invoiceNo) === compact(inv.invoiceNumber.value));
-  add('in_purchase_register', register.length > 0, register.length ? `${register.length} agreed lines for ${inv.invoiceNumber.value}` : `${inv.invoiceNumber.value} not in the purchase register`, [FILES.purchases]);
+  // A corrected invoice is matched against the agreed lines of the invoice it
+  // replaces, and must say on the document which one that is, from the same supplier.
+  const registerNo = c.corrects?.invoiceNo ?? inv.invoiceNumber.value;
+  if (c.corrects) {
+    const earlier = [...new Set([c.corrects.invoiceNo, ...c.history.map((h) => h.invoiceNo)])];
+    const named = earlier.find((no) => compact(c.invoiceText).includes(compact(no)));
+    const ok = !!named && compact(inv.supplierPib.value) === compact(c.corrects.pib) && !earlier.some((no) => compact(no) === compact(inv.invoiceNumber.value));
+    add(
+      'replaces_original',
+      ok,
+      ok
+        ? `${inv.invoiceNumber.value} states it replaces ${named}; same supplier PIB ${c.corrects.pib}`
+        : `a corrected invoice must have a new number, name the invoice it replaces (${earlier.join(' or ')}) and come from the same supplier (PIB ${c.corrects.pib}); got ${inv.invoiceNumber.value}, PIB ${inv.supplierPib.value}${named ? '' : ', no reference to the original'}`,
+      [invSrc]
+    );
+  }
+  const register = purchases.filter((p) => compact(p.invoiceNo) === compact(registerNo));
+  add('in_purchase_register', register.length > 0, register.length ? `${register.length} agreed lines for ${registerNo}` : `${registerNo} not in the purchase register`, [FILES.purchases]);
 
   // Dates are cross-checked, not just found somewhere in the document: the
   // delivery date must be the register's receipt date (it drives the expiry

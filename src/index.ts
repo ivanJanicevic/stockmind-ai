@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
-import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import {
   defineRuntime,
@@ -13,7 +14,7 @@ import { join as joinNetwork } from '@jigjoy/mozaik-network';
 import { HOSTED_NETWORK, readInviteLink } from '@jigjoy/mozaik-network/invite-link';
 import { NetworkClient } from '@jigjoy/mozaik-network/network-client';
 
-import { loadConfig, parseApprovals, type Config } from './config.js';
+import { loadConfig, parseApprovals, parseCorrections, type Config } from './config.js';
 import { DATA_DIR, FILES, loadDataset, loadPlanningParams, readText } from './data/load.js';
 import { periodResult, priceChanges, round2, stockCheck, unitMargins, weeklyTrend } from './analytics.js';
 import {
@@ -26,6 +27,7 @@ import {
   missingDocuments,
   type ApCase,
   type Decision,
+  type Revision,
 } from './ap.js';
 import { parseInvoice, parseNote, verifyNote } from './documents.js';
 import {
@@ -47,6 +49,7 @@ import { WhenAnyAnswer, WhenInferenceCompleted, answerText } from './events.js';
 import { buildPaymentCsv, type PaymentOrder } from './payments.js';
 import { buildReport, DISCLAIMER, rsd, type AnalystResult, type PlanningSection, type TimelineEntry } from './report.js';
 import { pageHtml, startDashboard } from './dashboard.js';
+import { pdfText } from './pdf.js';
 import {
   CLAIMS_WRITER,
   CLAIM_OUTPUT,
@@ -100,6 +103,21 @@ const dashboardWanted = process.argv.includes('--dashboard');
 // docs/demo/ so GitHub Pages can replay it without a model or API key.
 const recording = process.argv.includes('--record');
 const DEMO_DIR = 'docs/demo';
+// `--correct 07=<pdf>`: the supplier's corrected invoice for a held case (see submitCorrection).
+const corrections = (() => {
+  try {
+    const map = parseCorrections(process.argv.slice(2));
+    for (const file of map.values()) if (!existsSync(file)) throw new Error(`--correct: ${file} not found`);
+    return map;
+  } catch (error) {
+    return fail((error as Error).message);
+  }
+})();
+const UPLOADS_DIR = `${OUT_DIR}/uploads`;
+// A document path as served under /doc/ (dashboard) and docs/demo/doc/ (replay).
+const docPath = (file: string) => file.replace(/^(data|out)\//, '');
+// Where to read it: data/ is next to the code, out/ is in the working directory.
+const docFile = (file: string) => (file.startsWith('data/') ? DATA_DIR + file.slice('data/'.length) : file);
 let dashboardUrl: string | null = null;
 
 // ---------------------------------------------------------------------------
@@ -186,10 +204,11 @@ interface AgentInfo {
   role: Role;
   caseId?: string;
   analyst?: string;
+  recheck?: boolean; // reads a corrected invoice; may answer after the run has finished
 }
 const agents = new Map<string, AgentInfo>();
 
-function register(name: string, role: Role, instruction: string, extra: { caseId?: string; analyst?: string } = {}): Agent {
+function register(name: string, role: Role, instruction: string, extra: { caseId?: string; analyst?: string; recheck?: boolean } = {}): Agent {
   const agent = createAgent({ name, capabilities: ['inference'], instruction, tools: [], handlers: [] });
   agents.set(agent.getId(), { agent, name, role, ...extra });
   state.timeline.set(agent.getId(), { agent: name, role, status: 'idle' });
@@ -438,6 +457,119 @@ function reviewItems(): Map<string, unknown> {
 
 // The reviewer starts once every specialist is in: all analysts answered and
 // every invoice pair checked.
+// ---------------------------------------------------------------------------
+// Corrected invoice: when the supplier answers a hold with a corrected invoice,
+// a person uploads it (dashboard) or passes it with --correct. A new invoice
+// clerk (a new agent that runs once) reads it, and code runs the same
+// three-way match against the unchanged delivery note and the agreed prices of
+// the original invoice. The delivery note is our receiving record and is never
+// replaced to clear a hold. The held version stays in the case history.
+
+const MAX_VERSIONS = 3;
+
+function submitCorrection(caseId: string, pdf: Buffer, fileName: string): { ok: boolean; message: string } {
+  const c = state.cases.find((x) => x.id === caseId);
+  if (!c) return { ok: false, message: `unknown case ${caseId}` };
+  const no = c.invoice?.invoiceNumber.value ?? c.history.at(-1)?.invoiceNo ?? c.invoiceFile;
+  if (!c.done || !invoiceIn.has(c.id) || !noteIn.has(c.id)) return { ok: false, message: `${no} is still being checked; try again when it is done` };
+  const decision = decide(c, config.approvalLimitRsd, approved);
+  const state_ = { ready: 'ready for payment', approved: 'approved', needs_approval: 'waiting for approval', held: 'held' }[decision];
+  if (decision !== 'held') return { ok: false, message: `${no} is ${state_}; only a held invoice can be replaced by a corrected one` };
+  // Needs the delivery note and the original invoice's number and supplier (from its reading, or kept from it).
+  const original = c.corrects ?? (c.invoice ? { invoiceNo: c.invoice.invoiceNumber.value, pib: c.invoice.supplierPib.value } : undefined);
+  if (!c.note || !original) return { ok: false, message: `${no}: the original invoice or delivery note wasn't read, so a correction can't be matched; check the documents by hand` };
+  if (c.version >= MAX_VERSIONS) return { ok: false, message: `${no}: already corrected ${c.version - 1} times; handle it by hand` };
+  let text: string;
+  try {
+    text = pdfText(pdf);
+  } catch (error) {
+    return { ok: false, message: `${fileName}: ${(error as Error).message}` };
+  }
+  if (text.replace(/\s/g, '').length < 200) return { ok: false, message: `${fileName}: no text layer (a scan?); only PDFs with text can be checked` };
+
+  const version = c.version + 1;
+  const base = `${c.id}-v${version}`;
+  mkdirSync(UPLOADS_DIR, { recursive: true });
+  writeFileSync(`${UPLOADS_DIR}/${base}.pdf`, pdf);
+  writeFileSync(`${UPLOADS_DIR}/${base}.txt`, text);
+  c.history.push({
+    version: c.version,
+    invoiceNo: c.invoice?.invoiceNumber.value ?? `${no} (corrected version not read)`,
+    supplier: c.invoice?.supplierName.value ?? c.history.at(-1)?.supplier ?? '',
+    invoicePdf: c.invoicePdf,
+    decision,
+    problems: [...c.errors, ...blockingFailures(c).map((x) => x.detail)],
+    atStakeRsd: round2(blockingFailures(c).reduce((sum, x) => sum + x.impactRsd, 0)),
+    ...(c.claim ? { claim: c.claim } : {}),
+  } satisfies Revision);
+  c.corrects = original;
+  Object.assign(c, { version, invoicePdf: `${UPLOADS_DIR}/${base}.pdf`, invoiceRef: `uploads/${base}.txt`, invoiceText: text, checks: [], errors: [], done: false });
+  delete c.invoice;
+  delete c.claim;
+  delete c.claimError;
+  invoiceIn.delete(c.id);
+
+  const invoice = register(`Invoice Clerk ${c.id} · v${version}`, 'invoice', INVOICE_CLERK, { caseId: c.id, recheck: true });
+  const claims = register(`Claims Writer ${c.id} · v${version}`, 'claims', CLAIMS_WRITER, { caseId: c.id, recheck: true });
+  clerks.set(c.id, { ...clerks.get(c.id)!, invoice, claims });
+  console.log(`${stamp()} [correction] ${fileName} received for ${c.corrects.invoiceNo} (v${version})`);
+  run(invoice, documentMessage(c.invoicePdf, text), INVOICE_OUTPUT);
+  // Fails closed: no answer in time leaves the invoice held.
+  setTimeout(() => {
+    if (c.version === version && !c.done) failRechecks(`no answer within ${config.timeoutMs} ms`, c.id);
+  }, config.timeoutMs).unref();
+  recordFrame(true);
+  return { ok: true, message: `received as version ${version}: a new invoice clerk is reading it, then code re-runs the three-way match against the unchanged delivery note` };
+}
+
+// After an agent of a case finished: submit a --correct file once the case is
+// held, and after the run refresh the payment draft when a re-check is done.
+function afterCase(c: ApCase, info: AgentInfo): void {
+  if (!c.done) return;
+  const file = corrections.get(c.id);
+  if (file && c.version === 1 && decide(c, config.approvalLimitRsd, approved) === 'held') {
+    corrections.delete(c.id);
+    const result = submitCorrection(c.id, readFileSync(file), file.split('/').pop()!);
+    if (!result.ok) console.warn(`[correction] ${result.message}`);
+    return;
+  }
+  if (finished && info.recheck) {
+    const out = writeOutputs();
+    const decision = out.decisions.get(c.id)!;
+    console.log(`${stamp()} [correction] ${c.invoice?.invoiceNumber.value ?? `${c.corrects?.invoiceNo} correction`} (v${c.version}): ${decision}${c.invoice ? '' : ' (not read)'}`);
+    console.log(`${stamp()} [correction] payment draft: ${out.orders.length} orders, ${rsd(out.paymentTotal)}; report updated`);
+  }
+}
+
+// A re-check that can't finish holds only its own invoice; it never stops a run.
+function failRechecks(reason: string, caseId?: string): void {
+  for (const id of [...pendingLoops.keys()]) {
+    const info = agents.get(id);
+    if (!info?.recheck || (caseId && info.caseId !== caseId)) continue;
+    pendingLoops.delete(id);
+    answered.add(id);
+    const entry = state.timeline.get(id);
+    if (entry) entry.status = 'no answer';
+    console.warn(`${stamp()} [${info.name}] ${reason}`);
+    const c = caseOf(info.caseId!);
+    if (info.role === 'claims') c.claimError = reason;
+    else {
+      c.errors.push(`corrected invoice not read: ${reason}`);
+      invoiceIn.add(c.id);
+    }
+    c.done = true;
+    if (finished) afterCase(c, info);
+  }
+  recordFrame(true);
+  finishIfDone();
+}
+
+// Model errors stop the run; after it, they fail only the pending re-checks.
+function stop(reason: string): void {
+  if (finished) failRechecks(reason);
+  else abort(reason);
+}
+
 function maybeStartReviewer(): void {
   if (reviewerStarted) return;
   const ready = state.analyses.every((a) => a.done) && state.cases.every((c) => invoiceIn.has(c.id) && noteIn.has(c.id));
@@ -483,6 +615,7 @@ function dispatch(info: AgentInfo, answer: string): void {
       state.reviewDone = true;
     }
   }
+  if (info.caseId) afterCase(caseOf(info.caseId), info);
   maybeStartReviewer();
   recordFrame(true);
   finishIfDone();
@@ -494,7 +627,7 @@ const NO_ANSWER_GRACE_MS = 15_000;
 function expectAnswer(producerId: string): void {
   setTimeout(() => {
     const info = agents.get(producerId);
-    if (!info || answered.has(producerId) || finished) return;
+    if (!info || answered.has(producerId) || (finished && !info.recheck)) return;
     answered.add(producerId);
     pendingLoops.delete(producerId);
     const entry = state.timeline.get(producerId);
@@ -513,7 +646,7 @@ const monitor = createHuman({
       processor: {
         apply({ event }) {
           const info = agents.get(event.producerId);
-          if (!info || answered.has(event.producerId) || finished) return;
+          if (!info || answered.has(event.producerId) || (finished && !info.recheck)) return;
           answered.add(event.producerId);
           pendingLoops.delete(event.producerId);
           const entry = state.timeline.get(event.producerId);
@@ -623,8 +756,8 @@ function snapshot(): unknown {
       const no = inv?.invoiceNumber.value ?? null;
       return {
         id: c.id,
-        invoiceNo: no ?? c.invoiceFile,
-        supplier: inv?.supplierName.value ?? '',
+        invoiceNo: no ?? c.history.at(-1)?.invoiceNo ?? c.invoiceFile,
+        supplier: inv?.supplierName.value ?? c.history.at(-1)?.supplier ?? '',
         pib: inv?.supplierPib.value ?? null,
         account: inv?.supplierAccount.value ?? null,
         issueDate: inv?.issueDate.value ?? null,
@@ -635,7 +768,10 @@ function snapshot(): unknown {
           : null,
         status,
         approvedBy: no ? (approvalNotes.get(no) ?? null) : null,
-        invoicePdf: `data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`,
+        invoicePdf: docPath(c.invoicePdf),
+        version: c.version,
+        corrects: c.corrects?.invoiceNo ?? null,
+        history: c.history.map((h) => ({ ...h, invoicePdf: docPath(h.invoicePdf) })),
         notePdf: `data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`,
         lines: (inv?.lines ?? []).map((l) => ({
           code: l.code,
@@ -712,11 +848,12 @@ function recordFrame(force = false): void {
 
 function writeReplay(): void {
   recordFrame(true);
-  mkdirSync(`${DEMO_DIR}/doc/fakture`, { recursive: true });
-  mkdirSync(`${DEMO_DIR}/doc/otpremnice`, { recursive: true });
   for (const c of state.cases) {
-    copyFileSync(`${DATA_DIR}fakture/${c.invoiceFile.replace('.txt', '.pdf')}`, `${DEMO_DIR}/doc/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`);
-    copyFileSync(`${DATA_DIR}otpremnice/${c.noteFile.replace('.txt', '.pdf')}`, `${DEMO_DIR}/doc/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`);
+    for (const file of [c.invoicePdf, ...c.history.map((h) => h.invoicePdf), `data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`]) {
+      const target = `${DEMO_DIR}/doc/${docPath(file)}`;
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(docFile(file), target);
+    }
   }
   writeFileSync(`${DEMO_DIR}/index.html`, pageHtml('replay'));
   // Citations are the same in every frame: store them once.
@@ -777,7 +914,7 @@ function writeOutputs() {
         valueDate: inv.dueDate.value,
         payer: master.platilac.naziv,
         payerAccount: master.platilac.racun,
-        source: `data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}: "${inv.totalAmount.quote}"`,
+        source: `${c.invoicePdf}: "${inv.totalAmount.quote}"`,
       };
     });
   const paymentTotal = round2(orders.reduce((s, o) => s + o.amount, 0));
@@ -832,7 +969,8 @@ function finish(exitCode: number): void {
     const failed = blockingFailures(c).map((x) => x.name);
     const why = c.errors.length ? ' (agent error)' : failed.length ? ` (${failed.join(', ')})` : '';
     const claim = c.claim ? ' + claim drafted' : '';
-    console.log(`${c.invoice?.invoiceNumber.value ?? c.invoiceFile}: ${decisions.get(c.id)}${why}${claim}`);
+    const corrected = c.corrects ? ` (corrected invoice v${c.version}, replaces ${c.corrects.invoiceNo})` : '';
+    console.log(`${c.invoice?.invoiceNumber.value ?? c.invoiceFile}: ${decisions.get(c.id)}${why}${claim}${corrected}`);
   }
   for (const a of state.analyses) {
     console.log(`${a.agent}: ${a.error ? 'failed' : `${a.accepted.length} findings accepted, ${a.rejected.length} rejected`}`);
@@ -922,11 +1060,11 @@ function handleModelError(error: unknown): void {
     console.warn(`[network] ${networkStatus}`);
     return;
   }
-  if (finished || allDone()) return; // a late duplicate after everything answered
+  if (allDone()) return; // a late duplicate after everything answered
   if (retryScheduled) return; // parallel loops usually fail together
 
   const status = (error as { status?: number } | null)?.status;
-  if (pendingLoops.size === 0) return abort(describeError(error));
+  if (pendingLoops.size === 0) return stop(describeError(error));
 
   let delayMs: number;
   let action: string;
@@ -937,7 +1075,7 @@ function handleModelError(error: unknown): void {
     delayMs = 500;
     action = 'without structured output';
   } else if (status !== undefined && !RETRYABLE.has(status)) {
-    return abort(describeError(error));
+    return stop(describeError(error));
   } else if (status === 429 && isShortRateLimit(error) && sameModelRetries < MAX_RATE_LIMIT_RETRIES) {
     sameModelRetries++;
     delayMs = rateLimitInfo(error).retryAfterMs ?? 30_000;
@@ -953,7 +1091,7 @@ function handleModelError(error: unknown): void {
     delayMs = 1000;
     action = `on fallback model ${currentModel()}`;
   } else {
-    return abort(describeError(error));
+    return stop(describeError(error));
   }
 
   retryScheduled = true;
@@ -1016,7 +1154,7 @@ console.log('');
 
 async function main(): Promise<void> {
   if (dashboardWanted) {
-    const dashboard = await startDashboard(Number(process.env.DASHBOARD_PORT ?? 3000), snapshot, approveInvoice);
+    const dashboard = await startDashboard(Number(process.env.DASHBOARD_PORT ?? 3000), snapshot, { approve: approveInvoice, correct: submitCorrection, uploadsDir: UPLOADS_DIR });
     if (dashboard) {
       dashboardUrl = dashboard.url;
       console.log(`Live dashboard: ${dashboardUrl}\n`);
@@ -1028,7 +1166,7 @@ async function main(): Promise<void> {
   }
   for (const c of state.cases) {
     const { invoice, note } = clerks.get(c.id)!;
-    run(invoice, documentMessage(`data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}`, c.invoiceText), INVOICE_OUTPUT);
+    run(invoice, documentMessage(c.invoicePdf, c.invoiceText), INVOICE_OUTPUT);
     run(note, documentMessage(`data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}`, c.noteText), NOTE_OUTPUT);
   }
 }

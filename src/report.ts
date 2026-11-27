@@ -108,7 +108,14 @@ export function buildReport(r: ReportInput): string {
 
   out.push('', '## 2. Invoice checks (invoice ↔ delivery note ↔ agreed prices)');
   for (const c of r.cases) {
-    out.push('', `### ${invoiceNo(c)} — ${LABEL[r.decisions.get(c.id) ?? 'held']}`, '', `Documents: \`data/fakture/${c.invoiceFile.replace('.txt', '.pdf')}\`, \`data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}\``, '');
+    out.push('', `### ${invoiceNo(c)} — ${LABEL[r.decisions.get(c.id) ?? 'held']}`, '', `Documents: \`${c.invoicePdf}\`, \`data/otpremnice/${c.noteFile.replace('.txt', '.pdf')}\``, '');
+    if (c.corrects) {
+      out.push(`Corrected invoice (version ${c.version}) replacing ${c.corrects.invoiceNo}: read by a new invoice clerk and matched again against the same delivery note and the agreed prices of ${c.corrects.invoiceNo}.`, '');
+      for (const h of c.history) {
+        out.push(`- v${h.version} ${h.invoiceNo} (\`${h.invoicePdf}\`) — ${LABEL[h.decision]}${h.atStakeRsd ? `, at stake ${rsd(h.atStakeRsd)}` : ''}: ${h.problems.join('; ') || '–'}${h.claim ? ` · claim drafted to ${h.claim.to}` : ''}`);
+      }
+      out.push(`- v${c.version} ${invoiceNo(c)} — ${LABEL[r.decisions.get(c.id) ?? 'held']} (checks below)`, '');
+    }
     for (const e of c.errors) out.push(`- ❌ agent: ${e}`);
     const failed = c.checks.filter((x) => !x.ok);
     for (const x of failed) {

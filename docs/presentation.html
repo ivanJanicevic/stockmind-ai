@@ -98,7 +98,7 @@
     <div class="card"><b>Every value is quoted</b><p class="small muted">Each value carries a verbatim quote that must be a whole printed row of the document, and amounts must appear as printed ("175,00").</p></div>
     <div class="card"><b>Every figure is sourced</b><p class="small muted">Analysts, the reviewer and claims may only use figures from the rows they cite; anything else is rejected and listed in the report.</p></div>
   </div>
-  <p class="small">Fails closed: a misread holds an invoice, it never pays it. A large clean invoice still waits for a human: <code>--approve</code> can't release a held one.</p>
+  <p class="small">Fails closed: a misread holds an invoice, it never pays it. A large clean invoice still waits for a human: <code>--approve</code> can't release a held one. A supplier's corrected invoice is read by a new clerk and matched again against the same delivery note, which is never replaced.</p>
 </section>
 
 <section class="slide">
@@ -108,7 +108,7 @@
     <tr><th>Invoice</th><th>Problem found</th><th class="num">At stake</th><th>Decision</th></tr>
     <tr><td>F-OPT-2026-0931</td><td>Coca-Cola 79,00 vs agreed 72,00</td><td class="num">806,40</td><td class="held">held + claim</td></tr>
     <tr><td>F-ZP-2026-01197</td><td>Espresso beans: 22 invoiced, 20 delivered</td><td class="num">5.880,00</td><td class="held">held + claim</td></tr>
-    <tr><td>F-OPT-2026-0988</td><td>Sprite: 72 invoiced, 48 delivered</td><td class="num">2.016,00</td><td class="held">held + claim</td></tr>
+    <tr><td>F-OPT-2026-0988</td><td>Sprite: 72 invoiced, 48 delivered</td><td class="num">2.016,00</td><td class="held">held + claim → corrected F-OPT-2026-1003 <span class="ok">ready</span></td></tr>
     <tr><td>F-HS-2026-0412</td><td>Jelen: 140 invoiced, 120 delivered</td><td class="num">2.880,00</td><td class="held">held + claim</td></tr>
     <tr><td>F-MD-2026-55271</td><td>Oat drink expired before delivery</td><td class="num">3.744,00</td><td class="held">held + claim</td></tr>
     <tr><td>F-ZP-2026-01184</td><td>Clean, 89.024,00 above the 50.000 agent limit</td><td class="num">–</td><td class="wait">needs human</td></tr>

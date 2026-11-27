@@ -16,7 +16,7 @@ const after = (text: string, label: string) => {
 const s = <T>(value: T, quote: string) => ({ value, quote });
 
 export function idealInvoice(text: string): InvoiceDoc {
-  const supplierName = text.split('\n')[1]!.trim();
+  const supplierName = text.split('\n').find((l) => /d\.o\.o\./.test(l))!.trim(); // the first company is the supplier
   const pib = /PIB: (\d{9})/.exec(text)![1]!;
   const account = /Tekući račun: ([\d-]+)/.exec(text)![1]!;
   const number = /Račun broj: (\S+)/.exec(text)![1]!;
