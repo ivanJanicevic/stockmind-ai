@@ -19,7 +19,7 @@ Per document: Extractor agent → deterministic checks → Auditor agent → (on
 - **Agents never decide alone.** `decide()` blocks on any failed check, a non-`ok` audit, or an agent error. Amounts above `APPROVAL_LIMIT_EUR` go to a human, and `--approve` can only release those, never blocked ones.
 - **Free-text agent output is guarded too.** The Verifier draft goes through `unsourcedFigures()` and is withheld if it contains a figure not in the sources.
 - **Agent prompts define INPUT, TASK, OUTPUT (exact JSON shape) and RULES.** Every JSON answer has a parser in `src/parsing.ts` and a test.
-- **Triggers are scoped to one producer** (`WhenAnswerFrom`), and each agent runs once. This prevents agent loops and runaway cost.
+- **Each agent runs once and agents never trigger themselves.** Independent agents start together through `run()`, and the Monitoring participant combines their `model.answer` events per case (`completeAnalysisIfReady`) before starting dependent agents. This prevents agent loops and runaway cost.
 - **Synthetic data only.** Keep the "not financial advice" disclaimer in console and report output.
 - Never read, print, or commit `.env`.
 

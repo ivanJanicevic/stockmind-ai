@@ -65,7 +65,7 @@ The sample batch is built to exercise every control:
   - Gemini 429/503 errors are retried or moved to `FALLBACK_MODELS`;
   - if everything fails, a partial report is still written.
 - **Usage:** token counts from `inference.completed` events are summed and shown in the console and the report.
-- **Mozaik Network (optional):** set `MOZAIK_INVITE` to a quoted hosted Network invite link to join one peer per Extractor, Auditor and Verifier. Quote the value because the link contains `#`. This makes the agents visible as Network participants; it does not send invoice data or agent outputs to the Network.
+- **Mozaik Network (optional):** set `MOZAIK_INVITE` to a quoted hosted Network invite link to join one peer per Extractor, Auditor and Verifier. Quote the value because the link contains `#`. The peers only mirror the agent names for visibility: they don't receive invoice data and don't take part in the work, which happens in the local Mozaik runtime. Joining runs in the background with a 15-second timeout, and a failure never stops the run; the report shows the Network status.
 
 | File | Role |
 | --- | --- |

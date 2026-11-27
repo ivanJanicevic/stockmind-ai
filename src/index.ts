@@ -177,6 +177,17 @@ const extractionAnswered = new Set<InvoiceCase>();
 const auditAnswered = new Set<InvoiceCase>();
 const verificationStarted = new Set<InvoiceCase>();
 const networkAgents: string[] = [];
+// Optional Mozaik Network visibility (see startNetwork); never blocks a run.
+let networkStatus = process.env.MOZAIK_INVITE?.trim() ? 'connecting' : 'off (MOZAIK_INVITE not set)';
+const NETWORK_TIMEOUT_MS = 15_000;
+// Errors thrown later by the network client (sockets, reconnects) must not be
+// mistaken for model errors and trigger retries or aborts.
+const isNetworkError = (error: unknown) =>
+  /mozaik-network|NetworkClient|network-client/i.test(String((error as Error | null)?.stack ?? error));
+
+// What the Auditor sees of the vendor master; its evidence may quote this or the document.
+const auditVendors = vendors.map(({ id, name, iban, emailDomain }) => ({ id, name, iban, emailDomain }));
+const auditVendorsText = JSON.stringify(auditVendors);
 
 for (const c of state.cases) {
   const extractor = createAgent({
@@ -317,7 +328,7 @@ const monitor = createHuman({
           const parsed = parseAudit(answer);
           if (parsed.ok) {
             const unsupportedQuotes = parsed.value.issues
-              .filter((issue) => issue.quote && !quoteInSource(issue.quote, c.doc.text))
+              .filter((issue) => issue.quote.trim() && !quoteInSource(issue.quote, `${c.doc.text}\n${auditVendorsText}`))
               .map((issue) => issue.field);
             if (unsupportedQuotes.length > 0) {
               c.errors.push(
@@ -397,7 +408,7 @@ function finish(exitCode: number): void {
   }
 
   const reportFile = `${OUT_DIR}/review.md`;
-  const usage = `models: ${config.models.slice(0, modelIndex + 1).join(' → ')}; tokens: ${tokens.input} in / ${tokens.output} out`;
+  const usage = `models: ${config.models.slice(0, modelIndex + 1).join(' → ')}; tokens: ${tokens.input} in / ${tokens.output} out; Mozaik Network: ${networkStatus}`;
   writeFileSync(
     reportFile,
     buildReport(state.cases, decisions, { approvalLimit: config.approvalLimitEur, draftFile, usage, vendors })
@@ -473,6 +484,11 @@ let sameModelRetries = 0;
 let retryScheduled = false;
 
 function handleModelError(error: unknown): void {
+  if (isNetworkError(error)) {
+    networkStatus = `error: ${describeError(error).replace(/^model call failed/, 'network')}`;
+    console.warn(`[network] ${networkStatus}`);
+    return;
+  }
   if (finished) return fail('unexpected error', error);
   // Several parallel loops usually fail together; handle them as one.
   if (retryScheduled) return;
@@ -560,21 +576,29 @@ async function connectNetworkAgents(): Promise<void> {
   console.log(`Connected ${networkAgents.length} agents to Mozaik Network.`);
 }
 
+// Optional and visibility-only: peers mirror agent names, the work happens in
+// the local runtime. It runs in the background, has its own timeout, and can
+// never block or fail a run.
+
+function startNetwork(): void {
+  if (networkStatus.startsWith('off')) return;
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`timed out after ${NETWORK_TIMEOUT_MS / 1000}s`)), NETWORK_TIMEOUT_MS).unref()
+  );
+  Promise.race([connectNetworkAgents(), timeout])
+    .then(() => {
+      networkStatus = `connected (${networkAgents.length} peers)`;
+    })
+    .catch((error: unknown) => {
+      networkStatus = `skipped: ${error instanceof Error ? error.message : String(error)}`;
+      console.warn(`[network] ${networkStatus}`);
+    });
+}
+
 async function start(): Promise<void> {
-  try {
-    await connectNetworkAgents();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    fail(`could not connect agents to Mozaik Network: ${message}`);
-  }
+  startNetwork();
 
   console.log(`Starting Extractor and Auditor loops concurrently for ${analyses.length} documents.`);
-  const auditVendors = vendors.map(({ id, name, iban, emailDomain }) => ({
-    id,
-    name,
-    iban,
-    emailDomain,
-  }));
   for (const { extractor, auditor, c } of analyses) {
     run(extractor, c, extractorMessage(c.doc.file, c.doc.text), EXTRACTION_OUTPUT);
     run(auditor, c, auditorMessage(c.doc.file, c.doc.text, auditVendors), AUDIT_OUTPUT);
