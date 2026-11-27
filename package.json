@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "agent:document": "tsx src/agents/document/run.ts",
+    "receive": "tsx src/agents/document/receive.ts",
+    "owner": "tsx src/peers/owner.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "build": "tsc",
@@ -20,6 +22,7 @@
   },
   "dependencies": {
     "@jigjoy/mozaik-network": "^0.1.0",
+    "@jigjoy/mozaik-rule-engine": "0.0.2",
     "@mozaik-ai/core": "6.0.0",
     "dotenv": "^18.0.10",
     "unpdf": "2.2.1"
